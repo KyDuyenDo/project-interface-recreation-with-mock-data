@@ -1,1 +1,2 @@
 - [AutoPlanning sub-planner system](sub-planner-system.md) — role-based permissions, workspace, line assignments, notification bell fully implemented.
+- [GA Wizard dispatch tracking](dispatch-tracking.md) — SubPlannerDispatchPanel added to Steps 2/3/4/6; mock endpoints at /runs/:id/dispatch and /runs/:id/dispatch-status.

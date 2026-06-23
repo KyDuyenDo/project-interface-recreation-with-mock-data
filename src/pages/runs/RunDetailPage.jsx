@@ -160,6 +160,8 @@ export default function RunDetailPage() {
     }
   }, [publishLogs, run?.lifecycle_status]);
 
+  const { isMain } = usePermissions();
+
   if (!run) return (
     <div className="flex flex-col h-full items-center justify-center">
       <Loader2 size={28} className="animate-spin text-blue-500" />
@@ -174,8 +176,6 @@ export default function RunDetailPage() {
       console.error("Verification failed:", err);
     }
   };
-
-  const { isMain } = usePermissions();
   const liveStep    = statusData?.current_step ?? run.step_progress ?? 0;
   const liveStepName = statusData?.step_name ?? run.step_name ?? "—";
   const progressPct  = statusData?.progress_pct ?? (run.status === "done" ? 100 : 0);

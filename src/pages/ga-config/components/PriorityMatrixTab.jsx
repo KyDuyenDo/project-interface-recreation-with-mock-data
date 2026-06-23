@@ -495,7 +495,7 @@ function ProductionPanel({ lineId }) {
   });
   const PRESETS = [["3T", 3], ["6T", 6], ["1N", 12]];
   const { data: prodData, isLoading } = useLineProduction(lineId ? { line_id: lineId, ...range } : null);
-  const orders = prodData ?? [];
+  const orders = Array.isArray(prodData) ? prodData : (prodData?.items ?? []);
   const applyPreset = (m) => {
     const to = vnNow(); const from = vnNow(); from.setUTCMonth(from.getUTCMonth() - m);
     setRange({ date_from: from.toISOString().slice(0, 10), date_to: to.toISOString().slice(0, 10) });

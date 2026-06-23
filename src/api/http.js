@@ -8,6 +8,10 @@ import * as M from "./mockData";
 
 const LATENCY = 180; // simulated network delay (ms)
 
+// ── In-memory dispatch state per run+step ─────────────────────────────────────
+// key: `${runId}:${step}` → { dispatched, dispatched_at, planners: [{username, name, lines, status, updated_at, reject_reason}] }
+const DISPATCH_STATE = {};
+
 function ok(data) {
   return new Promise((resolve) => setTimeout(() => resolve({ data }), LATENCY));
 }
@@ -359,6 +363,102 @@ function route(method, url, body, config) {
     if (tail === "step-approvals") {
       // already handled above — but catch here for safety
       return ok({ by_step: {}, tasks: [] });
+    }
+
+    // ── Dispatch: POST /runs/:id/dispatch ──────────────────────────────────
+    if (tail === "dispatch" && m === "POST") {
+      const step = body?.step;
+      const key  = `${runId}:${step}`;
+      // Build per-planner entries from line assignments
+      const plannerMap = {};
+      Object.values(M.MOCK_LINE_ASSIGNMENTS).forEach(la => {
+        if (!la.planner_username) return;
+        if (!plannerMap[la.planner_username]) {
+          plannerMap[la.planner_username] = {
+            username:      la.planner_username,
+            name:          la.planner_name,
+            lines:         [],
+            status:        "pending",
+            updated_at:    null,
+            reject_reason: null,
+          };
+        }
+        plannerMap[la.planner_username].lines.push(la.line_id);
+      });
+      const planners = Object.values(plannerMap);
+      DISPATCH_STATE[key] = { dispatched: true, dispatched_at: new Date().toISOString(), planners };
+      // Notify all sub-planners
+      planners.forEach(p => {
+        const stepLabels = { 2: "Xác nhận chuyền", 3: "Nhập NVL về", 4: "Nhập ngày GC", 6: "Review lịch" };
+        M.MOCK_NOTIFICATIONS.push({
+          id: M.MOCK_NOTIFICATIONS.length + 1,
+          to_username: p.username,
+          kind: "task_assigned",
+          title: `Bạn có công việc mới — ${stepLabels[step] || "Phân công"}`,
+          body: `Main Planner đã phân công bạn: ${stepLabels[step] || ""}. Vào "Công việc của tôi" để xác nhận.`,
+          run_id: runId,
+          step,
+          is_read: false,
+          created_at: new Date().toISOString(),
+        });
+      });
+      return ok({ ok: true, planners });
+    }
+
+    // ── Dispatch status: GET /runs/:id/dispatch-status?step=N ──────────────
+    if (tail === "dispatch-status") {
+      const step = parseInt(params.step, 10);
+      const key  = `${runId}:${step}`;
+      // 1. Check in-memory dispatch state (from "Phân công" button clicks)
+      if (DISPATCH_STATE[key]) {
+        // Merge with MOCK_TASK_ASSIGNMENTS (to pick up sub-planner status changes)
+        const existingTasks = M.MOCK_TASK_ASSIGNMENTS.filter(t => t.run_id === runId && t.step === step);
+        const state = DISPATCH_STATE[key];
+        if (existingTasks.length > 0) {
+          const merged = state.planners.map(p => {
+            const pTasks = existingTasks.filter(t => t.planner_username === p.username);
+            if (!pTasks.length) return p;
+            const hasRejected  = pTasks.some(t => t.status === "rejected");
+            const allConfirmed = pTasks.every(t => t.status === "confirmed");
+            const latestTask   = pTasks.reduce((a, b) => (a.confirmed_at || "") > (b.confirmed_at || "") ? a : b);
+            return {
+              ...p,
+              status:        hasRejected ? "rejected" : allConfirmed ? "confirmed" : "pending",
+              updated_at:    latestTask.confirmed_at || p.updated_at,
+              reject_reason: hasRejected ? (pTasks.find(t => t.status === "rejected")?.reject_reason || null) : null,
+            };
+          });
+          return ok({ ...state, planners: merged });
+        }
+        return ok(state);
+      }
+      // 2. Check MOCK_TASK_ASSIGNMENTS for pre-seeded tasks (e.g. run 48 steps 2, 6)
+      const existingTasks = M.MOCK_TASK_ASSIGNMENTS.filter(t => t.run_id === runId && t.step === step);
+      if (existingTasks.length > 0) {
+        const plannerMap = {};
+        existingTasks.forEach(t => {
+          if (!plannerMap[t.planner_username]) {
+            plannerMap[t.planner_username] = {
+              username: t.planner_username, name: t.planner_name,
+              lines: [], status: "pending", updated_at: null, reject_reason: null,
+            };
+          }
+          const p = plannerMap[t.planner_username];
+          if (!p.lines.includes(t.line_id)) p.lines.push(t.line_id);
+          if (t.status === "rejected") {
+            p.status = "rejected";
+            p.reject_reason = t.reject_reason || null;
+          } else if (p.status !== "rejected") {
+            if (t.status === "confirmed") {
+              const plannerTasks = existingTasks.filter(x => x.planner_username === t.planner_username);
+              p.status = plannerTasks.every(x => x.status === "confirmed") ? "confirmed" : "pending";
+              p.updated_at = t.confirmed_at || null;
+            }
+          }
+        });
+        return ok({ dispatched: true, planners: Object.values(plannerMap) });
+      }
+      return ok({ dispatched: false, planners: [] });
     }
 
     if (p.length === 2) {
