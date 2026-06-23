@@ -229,9 +229,55 @@ function route(method, url, body, config) {
   if (p[0] === "runs" && p[2] === "step-approvals") {
     const runId = parseInt(p[1]);
     if (m === "POST") {
-      const { step, planner_username, line_id, status, reject_reason, note } = body || {};
+      const { step, planner_username, line_id, status, reject_reason, note, final_submit, line_decisions } = body || {};
       const REASON_LABELS = { wrong_model: "Sai dạng giày", no_capacity: "Không đủ năng lực" };
-      // Update matching tasks (filter by line_id if provided)
+
+      // ── New: final_submit with per-order decisions per line ──────────────────
+      if (final_submit && Array.isArray(line_decisions)) {
+        const subUser = M.MOCK_USERS[planner_username];
+        const rejectedLines = [];
+        line_decisions.forEach(({ line_id: ld, orders }) => {
+          (orders || []).forEach(ord => {
+            const task = M.MOCK_TASK_ASSIGNMENTS.find(t =>
+              t.run_id === runId &&
+              t.line_id === ld &&
+              t.order_id === ord.order_id
+            );
+            if (task) {
+              task.status        = ord.status === "accepted" ? "confirmed" : ord.status === "rejected" ? "rejected" : ord.status;
+              task.confirmed_at  = ord.status === "accepted" ? new Date().toISOString() : undefined;
+              task.reject_reason = ord.reject_reason || null;
+              task.note          = ord.note || null;
+            }
+            if (ord.status === "rejected") {
+              const label = REASON_LABELS[ord.reject_reason] || ord.reject_reason || "không xác định";
+              rejectedLines.push({ line_id: ld, order_id: ord.order_id, label, note: ord.note });
+            }
+          });
+        });
+        // Send one notification per rejected line summarising rejected orders
+        const rejectedByLine = {};
+        rejectedLines.forEach(r => {
+          if (!rejectedByLine[r.line_id]) rejectedByLine[r.line_id] = [];
+          rejectedByLine[r.line_id].push(r);
+        });
+        Object.entries(rejectedByLine).forEach(([ld, items]) => {
+          M.MOCK_NOTIFICATIONS.push({
+            id: M.MOCK_NOTIFICATIONS.length + 1,
+            to_username: "tran.minh",
+            kind: "task_rejected",
+            title: `Từ chối ${items.length} đơn — chuyền ${ld} (Run #${runId})`,
+            body: `${subUser?.full_name || planner_username} đã từ chối ${items.length} đơn hàng ở chuyền ${ld}: ${items.map(i => i.order_id).join(", ")}.`,
+            run_id: runId,
+            step,
+            is_read: false,
+            created_at: new Date().toISOString(),
+          });
+        });
+        return ok({ ok: true });
+      }
+
+      // ── Legacy: bulk line approval (kept for backward compat) ────────────────
       M.MOCK_TASK_ASSIGNMENTS
         .filter(t =>
           t.run_id === runId &&
@@ -247,7 +293,6 @@ function route(method, url, body, config) {
             t.note = note || null;
           }
         });
-      // Notify main planner on rejection
       if (status === "rejected") {
         const subUser = M.MOCK_USERS[planner_username];
         const reasonLabel = REASON_LABELS[reject_reason] || reject_reason || "không xác định";

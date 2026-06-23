@@ -1,0 +1,177 @@
+## 7. Điều kiện để gửi đánh giá cuối cùng
+
+Sub-Planner chỉ được phép gửi đánh giá chính thức sau khi đã xử lý toàn bộ đơn hàng trong Run của chuyền hiện tại.
+
+### Quy tắc bắt buộc
+
+Mỗi đơn hàng phải được đánh dấu một trong hai trạng thái:
+
+* Dự kiến chấp nhận
+* Dự kiến từ chối
+
+Không được tồn tại đơn hàng ở trạng thái:
+
+```text
+Chưa đánh giá
+```
+
+---
+
+### Điều kiện bật nút xác nhận cuối cùng
+
+Nút:
+
+```text
+[Xác nhận đánh giá chuyền]
+```
+
+chỉ được kích hoạt khi:
+
+```text
+Tổng số đơn hàng
+=
+Số đơn đã được đánh giá
+```
+
+Ví dụ:
+
+```text
+Tổng đơn hàng: 10
+
+Đã đánh giá:
+- Chấp nhận: 7
+- Từ chối: 2
+
+Chưa đánh giá: 1
+```
+
+Kết quả:
+
+```text
+[Xác nhận đánh giá chuyền]
+=> Disabled
+```
+
+Hiển thị thông báo:
+
+```text
+Vui lòng đánh giá tất cả đơn hàng trước khi gửi kết quả.
+```
+
+---
+
+### Khi toàn bộ đơn đã được đánh giá
+
+Ví dụ:
+
+```text
+Tổng đơn hàng: 10
+
+Chấp nhận: 8
+Từ chối: 2
+Chưa đánh giá: 0
+```
+
+Kết quả:
+
+```text
+[Xác nhận đánh giá chuyền]
+=> Enabled
+```
+
+Sub-Planner có thể gửi kết quả cho Main Planner.
+
+---
+
+### Hiển thị tiến độ đánh giá
+
+Tại đầu trang hiển thị:
+
+```text
+Đánh giá đơn hàng
+
+8 / 10 đơn đã xử lý
+```
+
+hoặc
+
+```text
+Đã đánh giá:
+8/10
+```
+
+Khi hoàn tất:
+
+```text
+10/10 đơn đã xử lý
+✓ Sẵn sàng gửi đánh giá
+```
+
+---
+
+### Trường hợp có nhiều chuyền trong cùng Run
+
+Ví dụ:
+
+```text
+Run #48
+
+B_L01
+B_L02
+```
+
+Mỗi tab chuyền có trạng thái đánh giá riêng.
+
+Sub-Planner chỉ được gửi đánh giá cuối cùng cho toàn bộ Run khi:
+
+```text
+B_L01: Hoàn thành đánh giá
+AND
+B_L02: Hoàn thành đánh giá
+```
+
+Tức là:
+
+* Tất cả đơn của B_L01 đã được xử lý.
+* Tất cả đơn của B_L02 đã được xử lý.
+
+Nếu còn bất kỳ đơn nào chưa đánh giá ở bất kỳ chuyền nào thì nút:
+
+```text
+[Gửi kết quả cho Main Planner]
+```
+
+vẫn bị khóa.
+
+---
+
+## Luồng hoàn chỉnh
+
+```text
+Mở Run
+
+↓
+
+Đánh giá từng đơn
+(Chấp nhận hoặc Từ chối)
+
+↓
+
+Có thể sửa đổi nhiều lần
+
+↓
+
+Tất cả đơn hàng đều đã được đánh giá
+
+↓
+
+Nút "Gửi kết quả cho Main Planner" được mở
+
+↓
+
+Xác nhận lần cuối
+
+↓
+
+Gửi kết quả chính thức
+```
