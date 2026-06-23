@@ -13,4 +13,4 @@ export * from "./useDebounce";
 export * from "./useBaoCao";
 export * from "./useWizard";
 export * from "./useKHXPlan";
-
+export * from "./usePermissions";

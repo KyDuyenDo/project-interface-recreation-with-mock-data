@@ -12,6 +12,7 @@ import { useQuery } from "@tanstack/react-query";
 import { wizardStateApi, runsApi } from "../../api";
 import { useOrders } from "../../hooks/useOrders";
 
+import { usePermissions } from "../../hooks/usePermissions";
 import StatusBadge from "./components/StatusBadge";
 import AcceptRunDialog  from "./components/AcceptRunDialog";
 import NewOrdersDialog  from "./components/NewOrdersDialog";
@@ -198,6 +199,7 @@ export default function RunsPage() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
+  const perms = usePermissions();
   const deleteMutation = useDeleteRun();
 
   const { data: wizardPlan } = useQuery({
@@ -463,7 +465,7 @@ export default function RunsPage() {
                     >
                       <Eye size={12} /> Chi tiết
                     </button>
-                    {r.status === "done" && r.lifecycle_status === "draft" && (
+                    {perms.isMain && r.status === "done" && r.lifecycle_status === "draft" && (
                       <button
                         className={`${BTN_SM} bg-blue-600 text-white border-blue-600 hover:bg-blue-700 shadow-sm`}
                         onClick={() => setAcceptTarget(r)}
@@ -471,7 +473,7 @@ export default function RunsPage() {
                         <Check size={12} /> Chấp nhận
                       </button>
                     )}
-                    {r.lifecycle_status !== "active" && (
+                    {perms.isMain && r.lifecycle_status !== "active" && (
                       <button
                         className={clsx(
                           BTN_SM,
@@ -514,11 +516,18 @@ export default function RunsPage() {
           <div className="text-xs text-gray-400 mt-0.5">TailFollow + ILS · lập lịch tự động theo đuôi chuyền</div>
         </div>
         <div className="flex-1" />
-        <button
-          className={`${BTN} bg-blue-600 text-white border-blue-600 hover:bg-blue-700`}
-          onClick={() => navigate("/runs/new")}>
-          <Plus size={14} /> Lập lịch mới
-        </button>
+        {perms.isMain && (
+          <button
+            className={`${BTN} bg-blue-600 text-white border-blue-600 hover:bg-blue-700`}
+            onClick={() => navigate("/runs/new")}>
+            <Plus size={14} /> Lập lịch mới
+          </button>
+        )}
+        {perms.isSub && (
+          <span className="text-xs px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 font-medium">
+            Chế độ xem — Sub-Planner
+          </span>
+        )}
       </header>
 
       <div className="flex-1 overflow-auto bg-gray-50 p-5">

@@ -13,6 +13,7 @@ import {
   useActiveRun,
 } from "../../hooks";
 import { wizardStateApi } from "../../api";
+import { usePermissions } from "../../hooks/usePermissions";
 import StatusBadge    from "./components/StatusBadge";
 import AcceptRunDialog from "./components/AcceptRunDialog";
 import Step6Edit      from "../ga-config/steps/Step6Edit";
@@ -174,6 +175,7 @@ export default function RunDetailPage() {
     }
   };
 
+  const { isMain } = usePermissions();
   const liveStep    = statusData?.current_step ?? run.step_progress ?? 0;
   const liveStepName = statusData?.step_name ?? run.step_name ?? "—";
   const progressPct  = statusData?.progress_pct ?? (run.status === "done" ? 100 : 0);
@@ -207,7 +209,7 @@ export default function RunDetailPage() {
           </span>
         )}
 
-        {run.lifecycle_status === "draft" && run.status === "done" && (
+        {isMain && run.lifecycle_status === "draft" && run.status === "done" && (
           <>
             <button
               className={`${BTN} bg-white text-blue-600 border-blue-200 hover:bg-blue-50 shadow-sm`}
@@ -221,7 +223,7 @@ export default function RunDetailPage() {
           </>
         )}
 
-        {run.lifecycle_status === "accepted" && (
+        {isMain && run.lifecycle_status === "accepted" && (
           <button
             className={`${BTN} bg-blue-600 text-white border-blue-600 hover:bg-blue-700 shadow-sm`}
             onClick={handleStartVerification}

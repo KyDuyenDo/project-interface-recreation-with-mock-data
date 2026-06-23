@@ -2,8 +2,7 @@
 // Mock HTTP client.
 // Drop-in replacement for the axios instance: exposes get/post/patch/put/delete
 // returning Promise<{ data }>. Routes every request to in-memory mock data so the
-// entire UI works without a live backend. The real axios-based client is kept in
-// http.real.js for reference.
+// entire UI works without a live backend.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as M from "./mockData";
 
@@ -13,7 +12,6 @@ function ok(data) {
   return new Promise((resolve) => setTimeout(() => resolve({ data }), LATENCY));
 }
 
-// Match "/runs/48/khx-plan" → captures. Returns array of path segments.
 function seg(url) {
   return url.split("?")[0].split("/").filter(Boolean);
 }
@@ -24,7 +22,10 @@ function route(method, url, body, config) {
   const m = method.toUpperCase();
 
   // ── Auth ──────────────────────────────────────────────────────────────────
-  if (url === "/auth/login") return ok({ user: M.MOCK_USER, access_token: "mock-token-" + Date.now() });
+  if (url === "/auth/login") {
+    const u = M.MOCK_USERS[body?.username] || M.MOCK_USER;
+    return ok({ user: u, access_token: "mock-token-" + Date.now() });
+  }
   if (url === "/auth/me") return ok(M.MOCK_USER);
 
   // ── Dashboard ───────────────────────────────────────────────────────────────
@@ -62,16 +63,181 @@ function route(method, url, body, config) {
     return ok({ items: M.PERIODS });
   }
 
+  // ── Notifications ──────────────────────────────────────────────────────────
+  if (p[0] === "notifications") {
+    if (p[1] === "unread-count") {
+      const username = params.username || "";
+      const count = M.MOCK_NOTIFICATIONS.filter(n => n.to_username === username && !n.is_read).length;
+      return ok({ count });
+    }
+    if (p.length === 2 && p[1] && m === "POST") {
+      // mark read
+      const id = parseInt(p[1]);
+      const n = M.MOCK_NOTIFICATIONS.find(n => n.id === id);
+      if (n) n.is_read = true;
+      return ok({ ok: true });
+    }
+    if (m === "POST" && p.length === 1) {
+      // mark all read
+      const username = body?.username || "";
+      M.MOCK_NOTIFICATIONS.filter(n => n.to_username === username).forEach(n => n.is_read = true);
+      return ok({ ok: true });
+    }
+    // GET list
+    const username = params.username || "";
+    const notes = M.MOCK_NOTIFICATIONS.filter(n => !username || n.to_username === username)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    return ok({ items: notes, total: notes.length });
+  }
+
+  // ── Task assignments ────────────────────────────────────────────────────────
+  if (p[0] === "tasks") {
+    // GET /tasks/my?username=xxx
+    if (p[1] === "my") {
+      const username = params.username || "";
+      const tasks = M.MOCK_TASK_ASSIGNMENTS.filter(t => !username || t.planner_username === username);
+      return ok({ items: tasks, total: tasks.length });
+    }
+    // POST /tasks/:id/confirm
+    if (p.length === 3 && p[2] === "confirm") {
+      const id = parseInt(p[1]);
+      const task = M.MOCK_TASK_ASSIGNMENTS.find(t => t.id === id);
+      if (task) {
+        task.status = "confirmed";
+        task.qty_override = body?.qty_override ?? task.qty_override;
+        task.note = body?.note ?? task.note;
+        task.confirmed_at = new Date().toISOString();
+      }
+      return ok({ ok: true, task });
+    }
+    // POST /tasks/:id/reject
+    if (p.length === 3 && p[2] === "reject") {
+      const id = parseInt(p[1]);
+      const task = M.MOCK_TASK_ASSIGNMENTS.find(t => t.id === id);
+      if (task) {
+        task.status = "rejected";
+        task.note = body?.note ?? task.note;
+      }
+      return ok({ ok: true });
+    }
+    return ok({ items: M.MOCK_TASK_ASSIGNMENTS });
+  }
+
+  // ── Assignments (dispatch from main planner) ──────────────────────────────
+  if (p[0] === "assignments") {
+    if (p[1] === "dispatch" && m === "POST") {
+      // Create new task assignments
+      const runId = body?.run_id;
+      const step = body?.step;
+      const lineId = body?.line_id;
+      const orders = body?.orders || [];
+      const assignment = M.MOCK_LINE_ASSIGNMENTS[lineId];
+      if (assignment) {
+        orders.forEach(order => {
+          M.MOCK_TASK_ASSIGNMENTS.push({
+            id: M.MOCK_TASK_ASSIGNMENTS.length + 1,
+            run_id: runId,
+            step,
+            step_label: step === 2 ? "Ưu tiên & Chuyền" : step === 6 ? "Review lịch" : `Step ${step}`,
+            planner_username: assignment.planner_username,
+            planner_name: assignment.planner_name,
+            line_id: lineId,
+            order_id: order.order_id,
+            article: order.article,
+            model: order.model,
+            customer: order.customer,
+            qty: order.qty,
+            crd: order.crd,
+            status: "pending",
+            qty_override: null,
+            confirmed_at: null,
+            note: null,
+            created_at: new Date().toISOString(),
+          });
+          // Add notification
+          M.MOCK_NOTIFICATIONS.push({
+            id: M.MOCK_NOTIFICATIONS.length + 1,
+            to_username: assignment.planner_username,
+            kind: "task_assigned",
+            title: "Công việc mới được phân công",
+            body: `Bạn được phân công xác nhận đơn ${order.order_id} trên chuyền ${lineId}`,
+            run_id: runId,
+            step,
+            is_read: false,
+            created_at: new Date().toISOString(),
+          });
+        });
+      }
+      return ok({ ok: true, dispatched: orders.length });
+    }
+    // GET /assignments/:runId
+    const runId = parseInt(p[1]);
+    const tasks = M.MOCK_TASK_ASSIGNMENTS.filter(t => t.run_id === runId);
+    return ok({ items: tasks, total: tasks.length });
+  }
+
+  // ── Line assignments config ────────────────────────────────────────────────
+  if (p[0] === "lines") {
+    if (p[1] === "assignments") {
+      if (m === "POST" || m === "PUT") {
+        const { line_id, planner_username } = body || {};
+        if (line_id && planner_username) {
+          const u = M.MOCK_USERS[planner_username];
+          M.MOCK_LINE_ASSIGNMENTS[line_id] = {
+            line_id,
+            dep_name: line_id,
+            planner_username,
+            planner_name: u?.full_name || planner_username,
+          };
+          // update user assigned_lines
+          if (u && !u.assigned_lines.includes(line_id)) {
+            u.assigned_lines.push(line_id);
+          }
+        }
+        return ok({ ok: true });
+      }
+      return ok({ items: Object.values(M.MOCK_LINE_ASSIGNMENTS) });
+    }
+    if (p[1] === "factories") return ok(M.FACTORY_LIST);
+    if (p[1] === "eip") return ok(M.EIP_LINES);
+    if (p[1] === "floors") return ok(M.FLOORS);
+    if (p[1] === "pool") return ok(M.LINE_POOL);
+    return ok([]);
+  }
+
+  // ── Step approvals (per run per step) ─────────────────────────────────────
+  if (p[0] === "runs" && p[2] === "step-approvals") {
+    const runId = parseInt(p[1]);
+    if (m === "POST") {
+      const { step, planner_username, status } = body || {};
+      // Update matching tasks
+      M.MOCK_TASK_ASSIGNMENTS
+        .filter(t => t.run_id === runId && t.step === step && t.planner_username === planner_username)
+        .forEach(t => {
+          t.status = status;
+          if (status === "confirmed") t.confirmed_at = new Date().toISOString();
+        });
+      return ok({ ok: true });
+    }
+    // GET — return approval status per step
+    const tasks = M.MOCK_TASK_ASSIGNMENTS.filter(t => t.run_id === runId);
+    const byStep = {};
+    tasks.forEach(t => {
+      if (!byStep[t.step]) byStep[t.step] = { total: 0, confirmed: 0, pending: 0, rejected: 0 };
+      byStep[t.step].total++;
+      byStep[t.step][t.status] = (byStep[t.step][t.status] || 0) + 1;
+    });
+    return ok({ by_step: byStep, tasks });
+  }
+
   // ── Runs ──────────────────────────────────────────────────────────────────
   if (p[0] === "runs") {
-    // /runs/active
     if (p[1] === "active") return ok(M.RUNS.find((r) => r.lifecycle_status === "active") || null);
     if (p[1] === "wizard-in-progress") return ok(null);
     if (p[1] === "wizard-close-stale" && m === "POST") return ok({ closed: 0 });
     if (p[1] === "draft" && m === "POST") return ok({ id: 100, label: body?.label || "draft", status: "draft", lifecycle_status: "draft" });
     if (p[1] === "publish-logs" && p[3] === "details") return ok({ items: [] });
 
-    // /runs  (list)
     if (p.length === 1) {
       if (m === "POST") {
         const existingIdx = M.RUNS.findIndex((r) => r.id === 101);
@@ -98,13 +264,18 @@ function route(method, url, body, config) {
     const runId = parseInt(p[1], 10);
     const tail = p[2];
 
+    // handle step-approvals before the switch
+    if (tail === "step-approvals") {
+      // already handled above — but catch here for safety
+      return ok({ by_step: {}, tasks: [] });
+    }
+
     if (p.length === 2) {
       if (m === "DELETE") {
         const idx = M.RUNS.findIndex((r) => r.id === runId);
         if (idx >= 0) M.RUNS.splice(idx, 1);
         return ok({ ok: true });
       }
-      // detail
       return ok(M.RUNS.find((r) => r.id === runId) || M.makeRun(runId));
     }
 
@@ -126,9 +297,7 @@ function route(method, url, body, config) {
         const r = M.RUNS.find((x) => x.id === runId);
         if (r) {
           r.lifecycle_status = "verifying";
-          setTimeout(() => {
-            r.lifecycle_status = "active";
-          }, 3000);
+          setTimeout(() => { r.lifecycle_status = "active"; }, 3000);
         }
         return ok({ id: 9002, status: "verifying" });
       }
@@ -182,7 +351,6 @@ function route(method, url, body, config) {
   if (p[0] === "materials") {
     if (p[2] === "import") return ok({ updated: 12, inserted: 4 });
     if (m === "PUT") return ok({ ok: true });
-    // If order_ids param is present, return wizard-specific ETAs
     if (params.order_ids) return ok({ items: M.MOCK_WIZARD_MATERIAL_ETAS, total: M.MOCK_WIZARD_MATERIAL_ETAS.length });
     return ok({ items: M.MATERIAL_ETAS, total: M.MATERIAL_ETAS.length });
   }
@@ -219,15 +387,6 @@ function route(method, url, body, config) {
     return ok({ items: [] });
   }
 
-  // ── Lines / factories ─────────────────────────────────────────────────────────
-  if (p[0] === "lines") {
-    if (p[1] === "factories") return ok(M.FACTORY_LIST);
-    if (p[1] === "eip") return ok(M.EIP_LINES);
-    if (p[1] === "floors") return ok(M.FLOORS);
-    if (p[1] === "pool") return ok(M.LINE_POOL);
-    return ok([]);
-  }
-
   // ── Throughputs ─────────────────────────────────────────────────────────────
   if (p[0] === "throughputs") {
     if (p[1] === "overrides") {
@@ -252,7 +411,6 @@ function route(method, url, body, config) {
 }
 
 const makeMethod = (verb) => (url, a, b) => {
-  // axios signatures: get(url, config) / post(url, body, config) / delete(url, config)
   if (verb === "get" || verb === "delete") return route(verb, url, undefined, a);
   return route(verb, url, a, b);
 };

@@ -29,8 +29,27 @@ function addDays(base, n) { const d = new Date(base); d.setDate(d.getDate() + n)
 
 const TODAY = new Date(2026, 5, 23); // 2026-06-23
 
-// ── Auth ────────────────────────────────────────────────────────────────────
-export const MOCK_USER = { id: 1, username: "tran.minh", full_name: "Trần Minh", role: "admin", email: "tran.minh@ga-planning.vn" };
+// ── Auth ─────────────────────────────────────────────────────────────────────
+export const MOCK_USERS = {
+  "tran.minh":  { id: 1, username: "tran.minh",  full_name: "Trần Minh",    role: "main_planner", email: "tran.minh@ga.vn",   assigned_lines: [] },
+  "nguyen.van": { id: 2, username: "nguyen.van", full_name: "Nguyễn Văn A", role: "sub_planner",  email: "nguyen.van@ga.vn",  assigned_lines: ["B_L01","B_L02"] },
+  "le.thi":     { id: 3, username: "le.thi",     full_name: "Lê Thị B",     role: "sub_planner",  email: "le.thi@ga.vn",      assigned_lines: ["B_L03","B_L04"] },
+  "pham.duc":   { id: 4, username: "pham.duc",   full_name: "Phạm Đức C",   role: "sub_planner",  email: "pham.duc@ga.vn",    assigned_lines: ["C_L01","C_L02"] },
+  "hoang.mai":  { id: 5, username: "hoang.mai",  full_name: "Hoàng Mai D",  role: "sub_planner",  email: "hoang.mai@ga.vn",   assigned_lines: ["A_L01","A_L02"] },
+};
+export const MOCK_USER = MOCK_USERS["tran.minh"];
+
+// ── Line → sub-planner assignment map ────────────────────────────────────────
+export const MOCK_LINE_ASSIGNMENTS = {
+  "B_L01": { line_id: "B_L01", dep_name: "B_L01", planner_username: "nguyen.van", planner_name: "Nguyễn Văn A" },
+  "B_L02": { line_id: "B_L02", dep_name: "B_L02", planner_username: "nguyen.van", planner_name: "Nguyễn Văn A" },
+  "B_L03": { line_id: "B_L03", dep_name: "B_L03", planner_username: "le.thi",     planner_name: "Lê Thị B" },
+  "B_L04": { line_id: "B_L04", dep_name: "B_L04", planner_username: "le.thi",     planner_name: "Lê Thị B" },
+  "C_L01": { line_id: "C_L01", dep_name: "C_L01", planner_username: "pham.duc",   planner_name: "Phạm Đức C" },
+  "C_L02": { line_id: "C_L02", dep_name: "C_L02", planner_username: "pham.duc",   planner_name: "Phạm Đức C" },
+  "A_L01": { line_id: "A_L01", dep_name: "A_L01", planner_username: "hoang.mai",  planner_name: "Hoàng Mai D" },
+  "A_L02": { line_id: "A_L02", dep_name: "A_L02", planner_username: "hoang.mai",  planner_name: "Hoàng Mai D" },
+};
 
 // ── Schedule periods ──────────────────────────────────────────────────────────
 export const PERIODS = [
@@ -182,7 +201,6 @@ export function makeOrdersList(body = {}) {
   const pageSize = body.page_size || 50;
   let rows = BAO_CAO_ALL;
 
-  // Filter by order_ids when provided (wizard import path)
   if (body.order_ids?.length) {
     const idSet = new Set(body.order_ids.map(id => String(id).toUpperCase()));
     rows = rows.filter((r) => idSet.has(r.RY));
@@ -193,7 +211,7 @@ export function makeOrdersList(body = {}) {
     rows = rows.filter((r) => r.Article.toLowerCase().includes(q) || r.RY.toLowerCase().includes(q) || r.CUSTNAME.toLowerCase().includes(q));
   }
   const total = rows.length;
-  const items = rows.slice((page - 1) * pageSize, page * pageSize).map((r, i) => ({
+  const items = rows.slice((page - 1) * pageSize, page * pageSize).map((r) => ({
     id: r.ZLBH,
     order_id: r.RY,
     orderno: r.RY,
@@ -207,7 +225,6 @@ export function makeOrdersList(body = {}) {
     lpd: r.LPD,
     sdd: r.SDD,
     status: r.source === "ga_pending" ? "N" : "P",
-    // Nested order object — needed by Step1Orders table columns
     order: {
       ARTICLE:   r.Article,
       DAOMH_:    r.DAOMH,
@@ -375,7 +392,6 @@ export function makeRunStatus(runId) {
 
 // ── Wizard per-run state (comprehensive mock) ────────────────────────────────
 
-// Fixed set of wizard orders so all steps reference the same IDs consistently.
 const WIZARD_REGULAR_SOURCES = BAO_CAO_ALL.slice(0, 25);
 const WIZARD_GC_SOURCES      = BAO_CAO_ALL.slice(40, 48);
 
@@ -407,7 +423,6 @@ export function makeWizardOrders(runId) {
   return { regular, gc };
 }
 
-// Helper: all wizard order IDs (for cross-step references)
 const ALL_WIZARD_IDS = [
   ...WIZARD_REGULAR_SOURCES.map(r => r.RY),
   ...WIZARD_GC_SOURCES.map(r => r.RY),
@@ -432,10 +447,8 @@ export function makeBulkLookup(orderIds) {
 }
 
 // ── Step 2 — Model-line frequency ────────────────────────────────────────────
-// 20 articles with history, ~5 "new" articles without history
 export const MOCK_MODEL_LINE_FREQUENCY = (() => {
   const result = [];
-  // First 20 regular articles get frequency history
   WIZARD_REGULAR_SOURCES.slice(0, 20).forEach((r, i) => {
     const fprefix = r.ZLBH.slice(0, 1);
     const mayLines = LINES.filter(l => l.startsWith(fprefix + "_")).slice(0, 3);
@@ -464,7 +477,6 @@ export const MOCK_MODEL_LINE_FREQUENCY = (() => {
       }] : [],
     });
   });
-  // GC orders also get some frequency
   WIZARD_GC_SOURCES.slice(0, 5).forEach((r, i) => {
     result.push({
       article:     r.Article,
@@ -485,7 +497,6 @@ export const MOCK_MODEL_LINE_FREQUENCY = (() => {
 })();
 
 // ── Step 2 — Pre-populated priority config ───────────────────────────────────
-// Auto-assign lines from frequency data so Step 2 shows realistic assignments.
 export const MOCK_PRIORITY_CONFIG = (() => {
   const cfg = {};
   for (const m of MOCK_MODEL_LINE_FREQUENCY) {
@@ -493,16 +504,12 @@ export const MOCK_PRIORITY_CONFIG = (() => {
     const mayLines = (m.lines || []).filter(l => l.line_type === "may" || !l.line_type).map(l => l.line_id);
     const goLines  = (m.lines || []).filter(l => l.line_type === "go").map(l => l.line_id);
     const gcLines  = (m.gc_lines || []).map(l => l.line_id);
-
-    // For simplicity: all may lines → split primary(first 2) / backup(rest)
-    // If no explicit "go" type, use the last may line as go_primary
     const mayPrimary = mayLines.slice(0, 2);
     const mayBackup  = mayLines.slice(2);
     const goPrimary  = goLines.length > 0 ? goLines.slice(0, 1) : mayLines.slice(-1);
     const goBackup   = goLines.length > 1 ? goLines.slice(1) : [];
     const gcPrimary  = gcLines.slice(0, 1);
     const gcBackup   = gcLines.slice(1);
-
     cfg[key] = {
       may_primary: mayPrimary,
       may_backup:  mayBackup,
@@ -520,7 +527,7 @@ export const MOCK_WIZARD_MATERIAL_ETAS = (() => {
   const rows = [];
   ALL_WIZARD_IDS.forEach((id, i) => {
     const r = BAO_CAO_ALL.find(x => x.RY === id) || BAO_CAO_ALL[i];
-    const hasPending = i % 4 === 0; // ~25% orders have pending material
+    const hasPending = i % 4 === 0;
     rows.push({
       order_id: id,
       article:  r.Article,
@@ -534,7 +541,6 @@ export const MOCK_WIZARD_MATERIAL_ETAS = (() => {
 // Pre-populated material ETA overrides for Step 3
 export const MOCK_WIZARD_MATERIAL_ETA_OVERRIDES = (() => {
   const overrides = {};
-  // For ~25% of regular orders, set a default override date
   WIZARD_REGULAR_SOURCES.forEach((r, i) => {
     if (i % 4 === 0) {
       overrides[r.RY] = isoDate(addDays(TODAY, 3 + (i % 5)));
@@ -559,7 +565,6 @@ export const MOCK_WIZARD_GC_DATES = (() => {
 export function makeOutputDaily(runId) {
   const rows = [];
   const sizes = [36, 37, 38, 39, 40, 41, 42, 43, 44];
-  // Use all wizard orders and distribute across days
   [...WIZARD_REGULAR_SOURCES, ...WIZARD_GC_SOURCES].forEach((r, oi) => {
     const fprefix = r.ZLBH.slice(0, 1);
     const possibleLines = LINES.filter(l => l.startsWith(fprefix + "_"));
@@ -571,11 +576,10 @@ export function makeOutputDaily(runId) {
     let remaining = totalQty;
     for (let d = 0; d < nDays; d++) {
       const date = addDays(TODAY, startOffset + d);
-      if (date.getDay() === 0) continue; // skip Sunday
+      if (date.getDay() === 0) continue;
       const qty = d === nDays - 1 ? remaining : perDay;
       remaining -= qty;
       if (qty <= 0) continue;
-      // Distribute qty across sizes
       const sizeMap = {};
       let sizeRemaining = qty;
       sizes.forEach((sz, si) => {
@@ -601,7 +605,7 @@ export function makeOutputDaily(runId) {
   return { rows };
 }
 
-// ── Step 6 — Output lineload (aggregate daily report) ────────────────────────
+// ── Step 6 — Output lineload ──────────────────────────────────────────────────
 export function makeOutputLineload(runId) {
   const daily = makeOutputDaily(runId).rows;
   const groups = {};
@@ -613,7 +617,7 @@ export function makeOutputLineload(runId) {
         line: r.line,
         dep_name: r.line,
         total_qty: 0,
-        day_capacity: ri(1000, 2000), // realistic daily capacity
+        day_capacity: ri(1000, 2000),
         stage: r.stage,
       };
     }
@@ -624,198 +628,207 @@ export function makeOutputLineload(runId) {
 
 // ── Step 6 — Run Genes (lineup tab details) ──────────────────────────────────
 export function makeRunGenes(runId) {
-  // Use BAO_CAO_ALL to build detailed gene mappings for orders
   const items = Array.from({ length: 120 }, (_, i) => {
     const r = BAO_CAO_ALL[i];
     const isGc = WIZARD_GC_SOURCES.some(x => x.RY === r.RY);
     const fprefix = r.ZLBH.slice(0, 1);
-    
-    // Pick a line from LINES
-    const possibleLines = LINES.filter(l => l.startsWith(fprefix + "_"));
-    const line = possibleLines[i % possibleLines.length] || possibleLines[0];
-    
+    const linePool = isGc
+      ? GC_DEPARTMENTS.map(d => d.dep_no)
+      : LINES.filter(l => l.startsWith(fprefix + "_"));
+    const line = linePool[i % linePool.length];
+    const goStart = addDays(TODAY, ri(3, 45));
+    const goEnd = addDays(goStart, ri(2, 8));
+    const sewStart = addDays(goStart, -ri(3, 8));
+    const sewEnd = addDays(goStart, -1);
+    return {
+      order_id:  r.RY,
+      article:   r.Article,
+      model:     r.XieMing,
+      customer:  r.CUSTNAME,
+      line,
+      qty:       r.QTY,
+      crd:       r.CRD,
+      go_start:  isoDate(goStart),
+      go_end:    isoDate(goEnd),
+      sew_start: isoDate(sewStart),
+      sew_end:   isoDate(sewEnd),
+      is_gc:     isGc,
+      is_late:   goEnd > new Date(r.CRD),
+    };
+  });
+  return { items };
+}
+
+// ── KHX Plan ──────────────────────────────────────────────────────────────────
+export function makeKhxPlan(runId, zone, year, month) {
+  const targetZone = zone || ZONES[0];
+  const zoneLines = LINES.filter(l => l.startsWith(targetZone.split("-")[0] + "_"));
+  const targetYear = year ? parseInt(year) : 2026;
+  const targetMonth = month ? parseInt(month) : 7;
+  const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
+  const cells = [];
+  zoneLines.forEach((line, li) => {
+    Array.from({ length: 25 }, (_, oi) => {
+      const r = BAO_CAO_ALL[(li * 25 + oi) % BAO_CAO_ALL.length];
+      const startDay = ri(1, Math.max(1, daysInMonth - 10));
+      const endDay   = Math.min(startDay + ri(3, 10), daysInMonth);
+      cells.push({
+        line,
+        order_id:  r.RY,
+        article:   r.Article,
+        model:     r.XieMing,
+        customer:  r.CUSTNAME,
+        qty:       r.QTY,
+        start_day: startDay,
+        end_day:   endDay,
+        stage:     li % 2 === 0 ? "go" : "sew",
+        is_late:   rnd() > 0.85,
+        crd:       r.CRD,
+      });
+    });
+  });
+  return {
+    zone: targetZone,
+    year: targetYear,
+    month: targetMonth,
+    lines: zoneLines,
+    days_in_month: daysInMonth,
+    cells,
+  };
+}
+
+export function makeKhxPlanSheets(runId) {
+  return { zones: ZONES, years: [2026], months: [6, 7, 8] };
+}
+
+// ── Line with running ─────────────────────────────────────────────────────────
+export function makeLineWithRunning(runId, line, scDate) {
+  const targetLine = line || LINES[0];
+  const orders = Array.from({ length: ri(3, 8) }, (_, i) => {
+    const r = BAO_CAO_ALL[i * 7];
     return {
       order_id: r.RY,
-      cutting_die: r.DAOMH,
-      tool: r.XTMH,
-      last: r.DDMH,
-      style: r.XieMing,
-      article: r.Article,
-      dep_name_may: isGc ? `GC${200 + (i % 6)}` : `${line}_M`,
-      dep_name_go: isGc ? null : `${line}_G`,
-      line_may: isGc ? `GC${200 + (i % 6)}` : `${line}_M`,
-      line_go: isGc ? null : `${line}_G`,
+      article:  r.Article,
+      model:    r.XieMing,
+      customer: r.CUSTNAME,
+      qty:      r.QTY,
+      crd:      r.CRD,
+      status:   pick(["running", "scheduled", "pending"]),
     };
   });
-  return { items, genes: items, total: items.length };
+  return { line: targetLine, orders, sc_date: scDate || isoDate(TODAY) };
 }
 
-// ── Step 6 — Schedule daily (detailed drilldown by day/line) ──────────────────
+// ── PDSCH Running ────────────────────────────────────────────────────────────
+export const MOCK_PDSCH_RUNNING = Array.from({ length: 15 }, (_, i) => {
+  const r = BAO_CAO_ALL[i * 4];
+  return {
+    order_id: r.RY, article: r.Article, model: r.XieMing,
+    lpd: r.LPD, line: pick(LINES), stage: pick(["sew", "go"]),
+    remaining_qty: ri(500, 5000),
+  };
+});
+
+// ── Chunk edits ───────────────────────────────────────────────────────────────
+export const MOCK_CHUNK_EDITS = { items: [], edits: [] };
+
+// ── Schedule daily ────────────────────────────────────────────────────────────
 export function makeScheduleDaily(runId, targetDate) {
-  const daily = makeOutputDaily(runId).rows;
-  const filtered = targetDate ? daily.filter(r => r.date === targetDate) : daily;
-  
-  // Group by line
-  const linesMap = {};
-  for (const r of filtered) {
-    const o = BAO_CAO_ALL.find(x => x.RY === r.scbh) || {};
-    if (!linesMap[r.line]) {
-      linesMap[r.line] = {
-        line: r.line,
-        sew_orders: [],
-        go_orders: [],
-      };
-    }
-    const orderItem = {
-      order_id: r.scbh,
-      article: o.Article || "",
-      qty: r.qty,
-      stage: r.stage === "sew" ? "SEW" : r.stage === "go" ? "GO" : r.stage,
-      crd: o.CRD || "",
-      is_frozen: o.source === "in_production",
-      state: o.source === "in_production" ? "IN_PROGRESS" : "NEW",
-      sizes: r.sizes || {},
+  const date = targetDate || isoDate(TODAY);
+  const orders = Array.from({ length: ri(5, 12) }, (_, i) => {
+    const r = BAO_CAO_ALL[i * 3];
+    return {
+      order_id: r.RY, article: r.Article, model: r.XieMing,
+      line: pick(LINES), qty: ri(200, 1500), date, stage: pick(["sew", "go"]),
     };
-    if (r.stage === "sew") {
-      linesMap[r.line].sew_orders.push(orderItem);
-    } else {
-      linesMap[r.line].go_orders.push(orderItem);
-    }
-  }
-  return { lines: Object.values(linesMap) };
-}
-
-// ── Step 6 — Line with running orders (ERP current actuals) ───────────────────
-export function makeLineWithRunning(runId, line, scDate) {
-  const running = [];
-  const committed = [];
-  
-  const linePrefix = line ? line.split("_")[0] : "B";
-  const matching = BAO_CAO_ALL.filter(x => x.ZLBH.startsWith(linePrefix)).slice(0, 4);
-  
-  matching.forEach((r, i) => {
-    const qty = r.QTY;
-    const act = Math.round(qty * (0.3 + 0.1 * i));
-    const rem = qty - act;
-    if (i % 2 === 0) {
-      running.push({
-        scbh: r.RY,
-        actual_qty: act,
-        order_qty: qty,
-        remaining_qty: rem,
-      });
-    } else {
-      committed.push({
-        scbh: r.RY,
-        article: r.Article,
-        actual_sew_qty: act,
-        remaining_sew_qty: rem,
-        order_qty: qty,
-        lpd: r.LPD,
-      });
-    }
   });
-  return { running_orders: running, committed_orders: committed };
+  return { orders, date };
 }
 
-// ── Step 6 — PDSCH Running (existing scheduled orders) ───────────────────────
-export const MOCK_PDSCH_RUNNING = (() => {
-  const orders = [];
-  BAO_CAO_ALL.slice(100, 110).forEach((r, i) => {
-    const fprefix = r.ZLBH.slice(0, 1);
-    const line = LINES.filter(l => l.startsWith(fprefix + "_"))[i % 3] || "B_L01";
-    orders.push({
-      order_id: r.RY,
-      scbh: r.RY,
-      article: r.Article,
-      style: r.XieMing,
-      cutting_die: r.DAOMH,
-      line_may: `${line}_M`,
-      line_go: `${line}_G`,
-      qty: r.QTY,
-      actual_qty_sew: Math.round(r.QTY * 0.4),
-      actual_qty_go: Math.round(r.QTY * 0.2),
-      source: "production",
-      psdt: r.PSDT,
-      pedt: r.PEDT,
-      crd: r.CRD,
-      lpd: r.LPD,
+// ── Task assignments for sub-planner ─────────────────────────────────────────
+// In-memory store for tasks assigned by main-planner to sub-planners
+export let MOCK_TASK_ASSIGNMENTS = (() => {
+  const tasks = [];
+  // Step 2 tasks — line assignment
+  Object.values(MOCK_LINE_ASSIGNMENTS).forEach((la, i) => {
+    const runId = 48;
+    const ordersForLine = WIZARD_REGULAR_SOURCES.slice(i * 3, i * 3 + 3);
+    ordersForLine.forEach((r, oi) => {
+      tasks.push({
+        id: tasks.length + 1,
+        run_id: runId,
+        step: 2,
+        step_label: "Ưu tiên & Chuyền",
+        planner_username: la.planner_username,
+        planner_name: la.planner_name,
+        line_id: la.line_id,
+        order_id: r.RY,
+        article: r.Article,
+        model: r.XieMing,
+        customer: r.CUSTNAME,
+        qty: r.QTY,
+        crd: r.CRD,
+        status: oi === 0 ? "confirmed" : oi === 1 ? "pending" : "pending",
+        qty_override: null,
+        confirmed_at: oi === 0 ? addDays(TODAY, -1).toISOString() : null,
+        note: null,
+        created_at: addDays(TODAY, -2).toISOString(),
+      });
     });
   });
-  return orders;
+  // Step 6 tasks — schedule review
+  Object.values(MOCK_LINE_ASSIGNMENTS).forEach((la, i) => {
+    tasks.push({
+      id: tasks.length + 1,
+      run_id: 47,
+      step: 6,
+      step_label: "Review lịch",
+      planner_username: la.planner_username,
+      planner_name: la.planner_name,
+      line_id: la.line_id,
+      order_id: null,
+      article: null,
+      model: null,
+      customer: null,
+      qty: null,
+      crd: null,
+      status: i % 2 === 0 ? "confirmed" : "pending",
+      qty_override: null,
+      confirmed_at: i % 2 === 0 ? addDays(TODAY, -1).toISOString() : null,
+      note: null,
+      created_at: addDays(TODAY, -3).toISOString(),
+    });
+  });
+  return tasks;
 })();
 
-// ── Step 6 — Chunk edit history ──────────────────────────────────────────────
-export const MOCK_CHUNK_EDITS = [
-  { id: 1, order_id: WIZARD_REGULAR_SOURCES[0]?.RY || "RY20261", action: "move",
-    old_line: "B_L01", new_line: "B_L02", old_date: "2026-07-10", new_date: "2026-07-11",
-    old_qty: 1200, new_qty: 1200, edited_at: addDays(TODAY, -1).toISOString(), edited_by: "tran.minh" },
-  { id: 2, order_id: WIZARD_REGULAR_SOURCES[3]?.RY || "RY20264", action: "qty_change",
-    old_line: "B_L03", new_line: "B_L03", old_date: "2026-07-12", new_date: "2026-07-12",
-    old_qty: 1500, new_qty: 1800, edited_at: addDays(TODAY, -1).toISOString(), edited_by: "le.an" },
-  { id: 3, order_id: WIZARD_REGULAR_SOURCES[7]?.RY || "RY20268", action: "delete",
-    old_line: "C_L02", new_line: null, old_date: "2026-07-15", new_date: null,
-    old_qty: 900, new_qty: null, edited_at: addDays(TODAY, 0).toISOString(), edited_by: "tran.minh" },
-  { id: 4, order_id: WIZARD_GC_SOURCES[0]?.RY || "RY20281", action: "add",
-    old_line: null, new_line: "GC200", old_date: null, new_date: "2026-07-18",
-    old_qty: null, new_qty: 2000, edited_at: addDays(TODAY, 0).toISOString(), edited_by: "tran.minh" },
-];
-
-// ── KHX Plan sheets ──────────────────────────────────────────────────────────
-export function makeKhxPlanSheets(runId) {
-  const sheets = ZONES.map((zone) => ({ zone, year: 2026, month: 6, n_orders: ri(20, 60) }));
-  return { sheets };
-}
-
-export function makeKhxPlan(runId, zone, year, month) {
-  const y = +year || 2026;
-  const m = +month || 6;
-  const daysInMonth = new Date(y, m, 0).getDate();
-  const allDays = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-  const sundayDays = allDays.filter((d) => new Date(y, m - 1, d).getDay() === 0);
-  const sundaySet = new Set(sundayDays);
-  const zonePrefix = zone.split("-")[0];
-  const zoneLines = LINES.filter((l) => l.startsWith(zonePrefix)).slice(0, 4);
-
-  const lines = zoneLines.map((lineId) => {
-    const plan_by_day = {};
-    const actual_by_day = {};
-    const day_slots = {};
-    // Build a couple of orders flowing across days
-    let orderCounter = 0;
-    allDays.forEach((d) => {
-      if (sundaySet.has(d)) return;
-      const planQty = ri(800, 1600);
-      plan_by_day[d] = planQty;
-      actual_by_day[d] = d <= TODAY.getDate() && m === 6 ? Math.round(planQty * (0.7 + rnd() * 0.4)) : 0;
-      day_slots[d] = {};
-      [0, 1].forEach((si) => {
-        // group days into ~5-day order blocks
-        const orderId = `${lineId}-O${Math.floor((d - 1) / 5) + 1}-${si}`;
-        const r = BAO_CAO_ALL[(orderCounter + si * 7) % BAO_CAO_ALL.length];
-        const goThieu = ri(-300, 400);
-        const actQty = actual_by_day[d];
-        day_slots[d][si] = {
-          order_id: orderId,
-          ly: `LY${ri(100, 999)}`,
-          ry: r.RY,
-          model: `${r.XieMing}/${r.SPECID}`,
-          crd: `${r.CRD}/${r.COUNTRY}/${r.SDD}`,
-          pd: `${r.PSDT}/${r.Article}/${r.xuat_hang_du_kien || "-"}`,
-          material: `${r.UPMETA}/${(r.QTY / 1000).toFixed(1)}k`,
-          customer: r.CUSTNAME,
-          size: `${ri(35, 38)}-${ri(42, 45)}`,
-          ngay_chot: si === 0 ? r.PEDT : r.ga_go_end,
-          ngay_chot_type: si === 0 ? "MAY" : "GO",
-          go_thieu_val: goThieu,
-          actual_qty: actQty,
-          is_late: rnd() > 0.85,
-        };
-      });
-      orderCounter++;
+// ── Notifications ─────────────────────────────────────────────────────────────
+export let MOCK_NOTIFICATIONS = (() => {
+  const notes = [];
+  Object.values(MOCK_USERS).forEach((u) => {
+    if (u.role !== "sub_planner") return;
+    notes.push({
+      id: notes.length + 1,
+      to_username: u.username,
+      kind: "task_assigned",
+      title: "Công việc mới được phân công",
+      body: `Main Planner đã phân công bạn xác nhận lịch chuyền ${u.assigned_lines[0]} cho Run #48`,
+      run_id: 48,
+      step: 2,
+      is_read: false,
+      created_at: addDays(TODAY, -1).toISOString(),
     });
-    return { line_id: lineId, plan_by_day, actual_by_day, day_slots };
+    notes.push({
+      id: notes.length + 1,
+      to_username: u.username,
+      kind: "task_assigned",
+      title: "Cần review lịch sản xuất",
+      body: `Lịch chuyền ${u.assigned_lines[0]} đã được tạo. Vui lòng kiểm tra và xác nhận.`,
+      run_id: 47,
+      step: 6,
+      is_read: Math.random() > 0.5,
+      created_at: addDays(TODAY, -2).toISOString(),
+    });
   });
-
-  return { zone, year: y, month: m, all_days: allDays, sunday_days: sundayDays, n_orders: ri(20, 60), lines };
-}
+  return notes;
+})();

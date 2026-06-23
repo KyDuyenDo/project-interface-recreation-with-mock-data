@@ -1,0 +1,334 @@
+# Hướng dẫn triển khai hệ thống Sub-Planner (v2)
+
+## 1. Phân quyền tài khoản
+
+### 1.1. Mock Users & Login
+
+**File `src/api/mockData.js` (dòng 33)** — Thay `MOCK_USER` bằng bảng users:
+
+```js
+export const MOCK_USERS = {
+  "tran.minh":   { id: 1, username: "tran.minh",   full_name: "Trần Minh",     role: "main_planner", email: "tran.minh@ga.vn",   assigned_lines: [] },
+  "nguyen.van":  { id: 2, username: "nguyen.van",  full_name: "Nguyễn Văn A",  role: "sub_planner",  email: "nguyen.van@ga.vn",  assigned_lines: ["1M","2M"] },
+  "le.thi":      { id: 3, username: "le.thi",      full_name: "Lê Thị B",      role: "sub_planner",  email: "le.thi@ga.vn",      assigned_lines: ["3M","4M"] },
+  "pham.duc":    { id: 4, username: "pham.duc",     full_name: "Phạm Đức C",    role: "sub_planner",  email: "pham.duc@ga.vn",    assigned_lines: ["1G","2G"] },
+  "hoang.mai":   { id: 5, username: "hoang.mai",    full_name: "Hoàng Mai D",   role: "sub_planner",  email: "hoang.mai@ga.vn",   assigned_lines: ["3G","4G"] },
+};
+export const MOCK_USER = MOCK_USERS["tran.minh"]; // fallback mặc định
+```
+
+**File `src/api/http.js` (dòng 27)** — Login trả user theo username:
+
+```js
+if (url === "/auth/login") {
+  const u = M.MOCK_USERS[body?.username] || M.MOCK_USER;
+  return ok({ user: u, access_token: "mock-token-" + Date.now() });
+}
+```
+
+**File `src/pages/auth/LoginPage.jsx`** — Thêm quick-login buttons:
+
+```jsx
+// Sau form, thêm panel chọn nhanh tài khoản:
+<div className="mt-4 space-y-2">
+  <div className="text-xs font-semibold text-gray-500">Đăng nhập nhanh:</div>
+  <button onClick={() => quickLogin("tran.minh")}
+    className="w-full text-left px-3 py-2 rounded-lg border hover:bg-blue-50 text-sm">
+    🔵 Trần Minh — Main Planner
+  </button>
+  <button onClick={() => quickLogin("nguyen.van")}
+    className="w-full text-left px-3 py-2 rounded-lg border hover:bg-green-50 text-sm">
+    🟢 Nguyễn Văn A — Sub-Planner (1M, 2M)
+  </button>
+  <!-- tương tự cho le.thi, pham.duc, hoang.mai -->
+</div>
+```
+
+### 1.2. Bảng phân quyền chi tiết
+
+> [!IMPORTANT]
+> Đây là bảng quyết định ẩn/hiện/readonly cho TOÀN BỘ hệ thống.
+
+#### Sidebar Navigation
+
+| Mục sidebar | main_planner | sub_planner |
+|---|---|---|
+| Dashboard | ✅ Hiện | ✅ Hiện (read-only) |
+| BAO_CAO_SO_DUOI | ✅ Hiện | ❌ Ẩn |
+| KHX | ✅ Hiện | ❌ Ẩn |
+| **Lập lịch** | ✅ Hiện | ✅ Hiện (read-only, xem tổng quan) |
+| **Công việc của tôi** | ❌ Ẩn | ✅ Hiện (trang chính sub-planner) |
+| Events | ✅ Hiện | ❌ Ẩn |
+| Subcontractor | ✅ Hiện | ❌ Ẩn |
+| Material ETA | ✅ Hiện | ✅ Hiện (chỉ đơn được phân công) |
+| Mục tiêu dạng giày | ✅ Hiện | ❌ Ẩn |
+| New Models | ✅ Hiện | ❌ Ẩn |
+| **Phân chuyền** | ✅ Hiện | ❌ Ẩn |
+| Factories | ✅ Hiện | ❌ Ẩn |
+| Users & Roles | ✅ Hiện | ❌ Ẩn |
+| Settings | ✅ Hiện | ❌ Ẩn |
+| Sync Admin | ✅ (admin) | ❌ Ẩn |
+
+#### Wizard 7 Steps (khi vào `/runs/new`)
+
+| Step | main_planner | sub_planner |
+|---|---|---|
+| Step 1 - Chọn đơn | ✅ Nhập/sửa | 👁 Xem tổng quan (read-only) |
+| Step 2 - Ưu tiên | ✅ Sắp + **Nút phân công** | 👁 Xem tổng quan (read-only) |
+| Step 3 - NVL về | ✅ Xem tổng hợp + chờ phản hồi | 🔒 Chỉ làm việc qua "Công việc của tôi" |
+| Step 4 - Ngày GC | ✅ Xem tổng hợp + chờ phản hồi | 🔒 Chỉ làm việc qua "Công việc của tôi" |
+| Step 5 - Chạy GA | ✅ Bấm chạy | 👁 Xem trạng thái "Đang chờ..." |
+| Step 6 - Chỉnh sửa | ✅ Xem tổng + **Nút phân công review** | 👁 Xem tổng quan (read-only) |
+| Step 7 - Xác nhận | ✅ Lưu/Duyệt (sau khi sub confirm) | 👁 Xem trạng thái |
+
+#### Trang "Công việc của tôi" (`/my-tasks`) — CHỈ sub_planner
+
+| Task | Quyền |
+|---|---|
+| Step 2: Nhận phân công chuyền | Xem gợi ý hệ thống → Chấp nhận/Từ chối đơn |
+| Step 3: Nhập NVL cho đơn được phân công | Nhập ngày → Xác nhận hoàn tất |
+| Step 4: Nhập GC cho đơn được phân công | Nhập ngày → Xác nhận hoàn tất |
+| Step 6: Review lịch trên chuyền | Xem/Chỉnh sửa → Xác nhận lịch chính xác |
+| Theo dõi sản xuất | Xem + chỉnh sửa đơn đã phân công (sau khi lịch active) |
+
+#### Trang `/runs` (Lập lịch sản xuất)
+
+| Thành phần | main_planner | sub_planner |
+|---|---|---|
+| Card "Đơn hàng mới" | ✅ Click xem | ❌ Ẩn |
+| Card "KH đang thực hiện" | ✅ Click tiếp tục | 👁 Xem trạng thái (không click) |
+| Card "Lịch hiện hành" | ✅ Click xem chi tiết | 👁 Xem (link đến /my-tasks) |
+| Nút "+ Lập lịch mới" | ✅ Hiện | ❌ Ẩn |
+| Tab Lịch nháp | ✅ Full (Accept, Delete) | 👁 Xem danh sách |
+| Tab Đã duyệt & Đối soát | ✅ Full (Verify) | 👁 Xem danh sách |
+| Nút Chấp nhận/Xóa trên row | ✅ Hiện | ❌ Ẩn |
+
+#### Run Detail Page (`/runs/:id`)
+
+| Thành phần | main_planner | sub_planner |
+|---|---|---|
+| Nút "Accept lịch" | ✅ Hiện | ❌ Ẩn |
+| Nút "Verify ERP Sync" | ✅ Hiện | ❌ Ẩn |
+| Nút "Export" | ✅ Hiện | ✅ Hiện |
+| Tab Chỉnh sửa lịch | ✅ Sửa được | 👁 Xem (read-only) |
+| Tab Đơn hàng / Năng lực / NVL / GC | ✅ Full | 👁 Xem (read-only) |
+
+---
+
+## 2. Cách implement phân quyền trong code
+
+### 2.1. Hook `usePermissions`
+
+**File mới:** `src/hooks/usePermissions.js`
+
+```js
+import { useAuthStore } from "../store/authStore";
+
+export function usePermissions() {
+  const { user } = useAuthStore();
+  const role = user?.role || "sub_planner";
+  const isMain = role === "main_planner" || role === "admin";
+  const isSub = role === "sub_planner";
+  const myLines = user?.assigned_lines || [];
+
+  return {
+    role, isMain, isSub, myLines,
+    // Sidebar
+    canSeeOrders: isMain,
+    canSeeKHX: isMain,
+    canSeeLapLich: true,         // cả hai, nhưng sub = read-only
+    canSeeMyTasks: isSub,        // chỉ sub
+    canSeeLineAssignment: isMain,
+    canSeeConfig: isMain,
+    canSeeTracking: isMain,
+    canSeeMaterialETA: true,     // cả hai, sub lọc theo đơn
+    // Wizard
+    canEditStep: (step) => isMain || false,  // sub ko edit wizard trực tiếp
+    canDispatch: isMain,
+    canRunGA: isMain,
+    canConfirmFinal: isMain,
+    // Runs
+    canCreateRun: isMain,
+    canAcceptRun: isMain,
+    canDeleteRun: isMain,
+    canVerifyRun: isMain,
+  };
+}
+```
+
+### 2.2. Áp dụng vào Sidebar
+
+**File `src/components/layout/Sidebar.jsx`:**
+
+```jsx
+import { usePermissions } from "../../hooks/usePermissions";
+
+// Trong component:
+const { canSeeOrders, canSeeKHX, canSeeMyTasks, canSeeLineAssignment, canSeeConfig, isSub } = usePermissions();
+
+// Filter NAV_ITEMS dựa trên permissions:
+const filteredNav = NAV_ITEMS.filter(item => {
+  if (item.section) return true;
+  if (item.to === "/orders" && !canSeeOrders) return false;
+  if (item.to === "/khx-plan" && !canSeeKHX) return false;
+  if (item.to === "/my-tasks" && !canSeeMyTasks) return false;
+  if (item.to === "/line-assignments" && !canSeeLineAssignment) return false;
+  // ... tương tự cho các mục khác
+  return true;
+});
+
+// Thêm mục mới vào NAV_ITEMS:
+{ to: "/my-tasks", label: "Công việc của tôi", Icon: ClipboardList },  // sub_planner
+{ to: "/line-assignments", label: "Phân chuyền", Icon: GitBranch },    // main_planner
+```
+
+### 2.3. Áp dụng vào GAConfigPage (Wizard)
+
+```jsx
+const { isMain, isSub } = usePermissions();
+
+// Sub-planner vào wizard → chế độ read-only toàn bộ
+// Hiện banner: "Bạn đang xem ở chế độ tổng quan. Vào Công việc của tôi để thực hiện."
+{isSub && (
+  <div className="bg-blue-50 border border-blue-200 px-4 py-2 text-sm text-blue-700 flex items-center gap-2">
+    <Info size={14} />
+    Bạn đang xem tổng quan. <a href="/my-tasks" className="underline font-medium">Vào Công việc của tôi →</a>
+  </div>
+)}
+
+// Truyền readOnly prop vào tất cả step components khi isSub
+<Step1Orders readOnly={isSub} ... />
+<Step2Capacity readOnly={isSub} ... />
+```
+
+### 2.4. Áp dụng vào RunsPage
+
+```jsx
+const { canCreateRun, canAcceptRun, canDeleteRun } = usePermissions();
+
+// Ẩn nút "+ Lập lịch mới"
+{canCreateRun && <button>+ Lập lịch mới</button>}
+
+// Ẩn nút Chấp nhận/Xóa trên row
+{canAcceptRun && r.lifecycle_status === "draft" && <button>Chấp nhận</button>}
+{canDeleteRun && r.lifecycle_status !== "active" && <button><Trash2 /></button>}
+```
+
+---
+
+## 3. Tổng quan kiến trúc & luồng
+
+### Luồng 7 Steps với phân quyền
+```
+Step 1: Main → nhập đơn
+Step 2: Main → sắp ưu tiên → BẤM PHÂN CÔNG → Sub nhận việc qua /my-tasks
+Step 3: Sub → nhập NVL qua /my-tasks → Main chờ & theo dõi
+Step 4: Sub → nhập GC qua /my-tasks → Main chờ & theo dõi  
+Step 5: Main → chạy GA (Sub xem "đang chờ")
+Step 6: Main → phân công review → Sub review qua /my-tasks → confirm
+Step 7: Main → xác nhận & lưu (sau khi tất cả sub confirm)
+```
+
+### Chuyền chính vs chuyền phụ (Step 2)
+- **Chuyền chính**: Sub-planner chấp nhận nếu có khả năng sản xuất
+- **Chuyền phụ**: Sub-planner chấp nhận sau khi đơn chính ổn, có dư năng lực
+- Nếu chuyền chính từ chối → hệ thống tìm chuyền phụ đã chấp nhận để sắp
+
+---
+
+## 4. Mock Data & API Endpoints mới
+
+### mockData.js — Thêm:
+```js
+export const MOCK_LINE_ASSIGNMENTS = { /* line_id → sub_planner mapping */ };
+export function makeTaskAssignments(runId) { /* tasks by step */ }
+export function makeLineSuggestion(lineId) { /* gợi ý hệ thống */ }
+export const MOCK_NOTIFICATIONS = [ /* thông báo mẫu */ ];
+```
+
+### http.js — Thêm endpoints:
+```
+POST   /assignments/dispatch        → phân công từ main
+GET    /assignments/:runId          → danh sách phân công
+POST   /assignments/:id/respond     → sub chấp nhận/từ chối
+GET    /notifications               → thông báo
+POST   /notifications/:id/read      → đánh dấu đã đọc  
+GET    /tasks/my                    → task của sub hiện tại
+POST   /tasks/:id/submit            → sub submit
+GET    /lines/assignments           → cấu hình phân chuyền
+POST   /lines/assignments           → main cập nhật
+GET    /runs/:id/step-approvals     → trạng thái duyệt
+POST   /runs/:id/step-approvals     → sub xác nhận step
+```
+
+---
+
+## 5. File mới cần tạo
+
+```
+src/
+├── hooks/usePermissions.js          ← Hook phân quyền trung tâm
+├── hooks/useSubPlanner.js           ← useMyTasks, useSubmitTask...
+├── hooks/useNotifications.js        ← useNotifications, useUnreadCount...
+├── hooks/useLineAssignments.js      ← useLineAssignments, useDispatch...
+├── store/plannerStore.js            ← Zustand store phân công
+├── pages/sub-planner/
+│   ├── SubPlannerWorkspace.jsx      ← Trang chính sub-planner
+│   ├── SubPlannerStep2Task.jsx      ← Nhận phân công, gợi ý, accept/reject
+│   ├── SubPlannerStep3Task.jsx      ← Nhập NVL (reuse Step3, filter)
+│   ├── SubPlannerStep4Task.jsx      ← Nhập GC (reuse Step4, filter)
+│   └── SubPlannerStep6Task.jsx      ← Review lịch (reuse Step6, filter)
+├── pages/line-management/
+│   └── LineAssignmentPage.jsx       ← Phân chuyền cho sub-planner
+├── components/notifications/
+│   ├── NotificationBell.jsx         ← Icon chuông + badge
+│   └── NotificationPanel.jsx        ← Panel thông báo
+└── components/ui/
+    ├── RoleBadge.jsx                ← Badge vai trò
+    ├── ApprovalStatusBar.jsx        ← Thanh tiến trình duyệt
+    ├── SystemSuggestionCard.jsx     ← Card gợi ý hệ thống
+    └── TaskCard.jsx                 ← Card task
+```
+
+## 6. File cần cập nhật
+
+| File | Thay đổi |
+|---|---|
+| `src/api/mockData.js` | Thêm MOCK_USERS, MOCK_LINE_ASSIGNMENTS, generators |
+| `src/api/http.js` | Login theo username, thêm endpoints mới |
+| `src/api/index.js` | Thêm API functions mới |
+| `src/store/authStore.js` | Lưu assigned_lines vào user |
+| `src/App.jsx` | Thêm routes `/my-tasks`, `/line-assignments` |
+| `src/components/layout/Sidebar.jsx` | Filter nav theo role |
+| `src/pages/auth/LoginPage.jsx` | Quick-login buttons |
+| `src/pages/runs/RunsPage.jsx` | Ẩn nút theo quyền |
+| `src/pages/runs/RunDetailPage.jsx` | Ẩn nút Accept/Verify theo quyền |
+| `src/pages/ga-config/GAConfigPage.jsx` | Read-only mode cho sub |
+| `src/pages/ga-config/steps/Step2Capacity.jsx` | Nút phân công + status panel |
+| `src/pages/ga-config/steps/Step3MaterialETA.jsx` | Panel chờ phản hồi |
+| `src/pages/ga-config/steps/Step4GCDates.jsx` | Panel chờ phản hồi |
+| `src/pages/ga-config/steps/Step6Edit.jsx` | Nút phân công review |
+| `src/pages/ga-config/steps/Step7Confirm.jsx` | Kiểm tra approvals trước lưu |
+
+## 7. Thứ tự triển khai
+
+1. **mockData.js** — MOCK_USERS + login logic trong http.js
+2. **usePermissions.js** — Hook trung tâm
+3. **LoginPage.jsx** — Quick-login buttons
+4. **Sidebar.jsx** — Filter theo role
+5. **RunsPage.jsx + RunDetailPage.jsx** — Ẩn/hiện nút
+6. **GAConfigPage.jsx** — Read-only cho sub
+7. **LineAssignmentPage.jsx** — Trang phân chuyền
+8. **SubPlannerWorkspace.jsx** + 4 task components
+9. **Notification system**
+10. **Step2/3/4/6/7** — Dispatch + approval panels
+
+## 8. Gợi ý tính năng bổ sung
+
+- **Dashboard riêng sub-planner**: tải chuyền, deadline, đơn sắp tới
+- **Chat/Comment trên đơn**: trao đổi giữa main và sub
+- **Auto-reassign**: hệ thống đề xuất chuyền phụ khi chính từ chối
+- **Deadline tracker**: countdown + cảnh báo chưa phản hồi
+- **Audit log**: lịch sử ai làm gì lúc nào
+- **Template phân công**: lưu cấu hình phân chuyền hay dùng
+- **Conflict resolution**: xử lý khi 2 sub cùng liên quan 1 đơn

@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, X, Check, Lock, Eye, Loader2 } from "lucide-react";
 import { useRunStatus, useRunDetail } from "../../hooks/useRuns";
 import { wizardStateApi, runsApi } from "../../api";
+import { usePermissions } from "../../hooks/usePermissions";
 
 
 import Step1Orders      from "./steps/Step1Orders";
@@ -91,6 +92,7 @@ export default function GAConfigPage() {
   const navigate      = useNavigate();
   const queryClient   = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { isSub } = usePermissions();
   const resumeId = searchParams.get("resume") ? parseInt(searchParams.get("resume"), 10) : null;
 
   // Wizard state
@@ -423,6 +425,14 @@ export default function GAConfigPage() {
           <X size={13} /> Hủy nháp
         </button>
       </header>
+
+      {/* Sub-planner read-only banner */}
+      {isSub && (
+        <div className="flex items-center gap-2 px-5 py-2 bg-amber-50 border-b border-amber-200 text-sm text-amber-800 shrink-0">
+          <Eye size={14} className="shrink-0" />
+          <span><strong>Chế độ xem:</strong> Sub-Planner chỉ có thể xem cấu hình kế hoạch. Công việc cần xác nhận được phân công qua <a href="/my-tasks" className="underline font-semibold">Công việc của tôi</a>.</span>
+        </div>
+      )}
 
       {/* Step indicator */}
       <WizardStepper
