@@ -4,7 +4,6 @@ import {
   ChevronLeft, ChevronRight, RefreshCw, Loader2, Info, X,
   Upload, FileSpreadsheet, AlertTriangle, Eye,
 } from "lucide-react";
-import SubPlannerDispatchPanel from "../../../components/dispatch/SubPlannerDispatchPanel";
 import * as XLSX from "xlsx";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -791,13 +790,6 @@ export default function Step2Capacity({
       </div>
 
       </div>{/* end pointer-events wrapper */}
-
-      {/* Sub-planner dispatch tracking */}
-      {draftRunId && !readOnly && (
-        <div className="shrink-0">
-          <SubPlannerDispatchPanel runId={draftRunId} dispatchStep={2} readOnly={readOnly} />
-        </div>
-      )}
 
       {/* Navigation */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-3 flex items-center gap-3 shrink-0">

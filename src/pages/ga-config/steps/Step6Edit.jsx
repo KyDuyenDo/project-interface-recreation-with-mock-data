@@ -1,6 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { ChevronLeft, ChevronRight, Info, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
-import SubPlannerDispatchPanel from "../../../components/dispatch/SubPlannerDispatchPanel";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRunDetail, useRunOutputOrders, useRunOutputDaily } from "../../../hooks/useRuns";
 import { wizardStateApi } from "../../../api";
@@ -451,13 +450,6 @@ export default function Step6Edit({ runId, capacityOverrides, onPrev, onNext }) 
             </div>
           </div>
         </>
-      )}
-
-      {/* Sub-planner dispatch tracking — Step 6 review */}
-      {runId && (
-        <div className="px-5 pb-4 shrink-0">
-          <SubPlannerDispatchPanel runId={runId} dispatchStep={6} />
-        </div>
       )}
 
       {/* Footer */}

@@ -18,7 +18,6 @@ import {
   X, CalendarDays, Eye,
 } from "lucide-react";
 import ExcelGCDatesModal from "../components/ExcelGCDatesModal";
-import SubPlannerDispatchPanel from "../../../components/dispatch/SubPlannerDispatchPanel";
 
 const PAGE_SIZE = 20;
 
@@ -303,13 +302,6 @@ export default function Step4GCDates({
           </>
         )}
       </div>
-
-      {/* Sub-planner dispatch tracking */}
-      {draftRunId && !readOnly && (
-        <div className="px-5 pb-4">
-          <SubPlannerDispatchPanel runId={draftRunId} dispatchStep={4} readOnly={readOnly} />
-        </div>
-      )}
 
       {/* ── Footer navigation ──────────────────────────────────────────────── */}
       <div className="flex items-center gap-3 px-5 py-3 border-t border-gray-100 bg-gray-50 shrink-0">

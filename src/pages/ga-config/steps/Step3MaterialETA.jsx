@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Info, X, Loader2, FileSpreadsheet, Eye } from "lucide-react";
 import { useWizardMaterialEtas } from "../../../hooks/useWizard";
 import ExcelNvlImportModal from "../components/ExcelNvlImportModal";
-import SubPlannerDispatchPanel from "../../../components/dispatch/SubPlannerDispatchPanel";
 
 const BTN    = "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
 const BTN_SM = "inline-flex items-center gap-1 px-2 py-1 rounded-md border text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
@@ -136,13 +135,6 @@ export default function Step3MaterialETA({ selectedIds, materialEtaOverrides, se
           </>
         )}
       </div>
-
-      {/* Sub-planner dispatch tracking */}
-      {draftRunId && !readOnly && (
-        <div className="px-5 pb-4">
-          <SubPlannerDispatchPanel runId={draftRunId} dispatchStep={3} readOnly={readOnly} />
-        </div>
-      )}
 
       {/* Actions */}
       <div className="flex items-center gap-3 px-5 py-3 border-t border-gray-100 bg-gray-50">

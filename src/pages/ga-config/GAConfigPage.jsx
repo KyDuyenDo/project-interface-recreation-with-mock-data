@@ -1,10 +1,12 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, X, Check, Lock, Eye, Loader2 } from "lucide-react";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { ArrowLeft, X, Check, Lock, Eye, Loader2, Settings2, Users, CheckCircle2, AlertTriangle } from "lucide-react";
 import { useRunStatus, useRunDetail } from "../../hooks/useRuns";
 import { wizardStateApi, runsApi } from "../../api";
 import { usePermissions } from "../../hooks/usePermissions";
+import SubPlannerDispatchPanel from "../../components/dispatch/SubPlannerDispatchPanel";
+import http from "../../api/http";
 
 
 import Step1Orders      from "./steps/Step1Orders";
@@ -86,6 +88,97 @@ function WizardStepper({ step, completedUpTo, canNavigateTo, runStatus, gaHasRun
   );
 }
 
+// ─── Dispatch sub-tab bar ─────────────────────────────────────────────────────
+// Shown below WizardStepper for steps that support sub-planner dispatch.
+
+function DispatchSubTabBar({ dispatchStep, runId, subTab, onTabChange }) {
+  const STEP_LABEL = { 2: "Ưu tiên chuyền", 3: "NVL về", 4: "Ngày GC", 6: "Review lịch" };
+  const TAB_COLOR  = { 2: "blue", 3: "teal", 4: "orange", 6: "purple" };
+  const color = TAB_COLOR[dispatchStep] || "blue";
+
+  const activeConfig = {
+    blue:   "border-blue-600   text-blue-700   bg-blue-50/60",
+    teal:   "border-teal-600   text-teal-700   bg-teal-50/60",
+    orange: "border-orange-500 text-orange-700 bg-orange-50/60",
+    purple: "border-purple-600 text-purple-700 bg-purple-50/60",
+  }[color];
+
+  const badgeColor = {
+    blue:   "bg-blue-100   text-blue-700",
+    teal:   "bg-teal-100   text-teal-700",
+    orange: "bg-orange-100 text-orange-700",
+    purple: "bg-purple-100 text-purple-700",
+  }[color];
+
+  // Fetch dispatch status to show badge
+  const { data: statusData } = useQuery({
+    queryKey:  ["dispatch-status", runId, dispatchStep],
+    queryFn:   () => http.get(`/runs/${runId}/dispatch-status`, { params: { step: dispatchStep } }).then(r => r.data),
+    enabled:   !!runId,
+    refetchInterval: 10000,
+  });
+
+  const dispatched      = statusData?.dispatched;
+  const planners        = statusData?.planners || [];
+  const confirmedCount  = planners.filter(p => p.status === "confirmed").length;
+  const rejectedCount   = planners.filter(p => p.status === "rejected").length;
+  const total           = planners.length;
+  const allConfirmed    = total > 0 && confirmedCount === total;
+
+  return (
+    <div className="flex items-center border-b border-gray-200 bg-white shrink-0 px-5 gap-0">
+      {/* Config tab */}
+      <button
+        onClick={() => onTabChange("config")}
+        className={[
+          "flex items-center gap-1.5 px-4 py-2.5 border-b-2 text-sm font-medium transition-colors",
+          subTab === "config"
+            ? activeConfig
+            : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50",
+        ].join(" ")}
+      >
+        <Settings2 size={13} />
+        {STEP_LABEL[dispatchStep] || "Cấu hình"}
+      </button>
+
+      {/* Tracking tab */}
+      <button
+        onClick={() => onTabChange("tracking")}
+        className={[
+          "flex items-center gap-1.5 px-4 py-2.5 border-b-2 text-sm font-medium transition-colors",
+          subTab === "tracking"
+            ? activeConfig
+            : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50",
+        ].join(" ")}
+      >
+        <Users size={13} />
+        Theo dõi Sub-Planner
+        {/* Status badge */}
+        {dispatched && (
+          allConfirmed ? (
+            <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700 ml-0.5">
+              <CheckCircle2 size={9} /> {total}/{total}
+            </span>
+          ) : rejectedCount > 0 ? (
+            <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700 ml-0.5">
+              <AlertTriangle size={9} /> {rejectedCount} từ chối
+            </span>
+          ) : (
+            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-0.5 ${badgeColor}`}>
+              {confirmedCount}/{total}
+            </span>
+          )
+        )}
+        {!dispatched && (
+          <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-400 ml-0.5">
+            Chưa phân công
+          </span>
+        )}
+      </button>
+    </div>
+  );
+}
+
 // ─── Main wizard ──────────────────────────────────────────────────────────────
 
 export default function GAConfigPage() {
@@ -119,6 +212,13 @@ export default function GAConfigPage() {
 
   const [isLoadedFromServer, setIsLoadedFromServer] = useState(false);
   const [step2Loading,       setStep2Loading]       = useState(false);
+
+  // Sub-tab for dispatch-capable steps (1=Ưu tiên, 2=NVL, 3=GC, 5=Review)
+  const DISPATCH_STEPS = { 1: 2, 2: 3, 3: 4, 5: 6 }; // wizard index → dispatch step number
+  const [subTab, setSubTab] = useState("config"); // "config" | "tracking"
+
+  // Reset sub-tab when wizard step changes
+  useEffect(() => { setSubTab("config"); }, [step]);
 
   // Sync step → URL so each step has its own URL (browser history, refresh-safe)
   useEffect(() => {
@@ -444,82 +544,111 @@ export default function GAConfigPage() {
         onGoStep={goStep}
       />
 
+      {/* Dispatch sub-tab bar — only for steps that support sub-planner dispatch */}
+      {DISPATCH_STEPS[step] && !isSub && (
+        <DispatchSubTabBar
+          dispatchStep={DISPATCH_STEPS[step]}
+          runId={step === 5 ? runId : draftRunId}
+          subTab={subTab}
+          onTabChange={setSubTab}
+        />
+      )}
+
       {/* Step content */}
       <div className="flex-1 min-h-0 relative bg-gray-50">
         <div className="absolute inset-0 p-5 overflow-hidden flex flex-col">
-        {step === 0 && (
-          <Step1Orders
-            regularOrders={regularOrders}
-            setRegularOrders={setRegularOrders}
-            gcOrders={gcOrders}
-            setGcOrders={setGcOrders}
-            draftRunId={draftRunId}
-            readOnly={gaHasRun}
-            {...stepProps}
-          />
+
+        {/* ── Tracking sub-tab — replaces step content ── */}
+        {DISPATCH_STEPS[step] && subTab === "tracking" && !isSub && (
+          <div className="flex-1 overflow-y-auto">
+            <SubPlannerDispatchPanel
+              runId={step === 5 ? runId : draftRunId}
+              dispatchStep={DISPATCH_STEPS[step]}
+              readOnly={false}
+              onDispatch={() => {}}
+            />
+          </div>
         )}
-        {step === 1 && (
-          <Step2Capacity
-            selectedRegularIds={selectedRegularIds}
-            selectedGcIds={selectedGcIds}
-            knownOrdersMap={knownOrdersMap}
-            priorityConfig={priorityConfig}
-            onPriorityConfigChange={setPriorityConfig}
-            workingHoursPerDay={workingHoursPerDay}
-            onWorkingHoursChange={setWorkingHoursPerDay}
-            capChoices={capChoices}
-            onCapChoicesChange={setCapChoices}
-            importedTargetQty={importedTargetQty}
-            onImportedTargetQtyChange={setImportedTargetQty}
-            draftRunId={draftRunId}
-            onLoadingChange={setStep2Loading}
-            readOnly={gaHasRun}
-            {...stepProps}
-          />
+
+        {/* ── Config tab (or non-dispatch steps) ── */}
+        {(subTab === "config" || !DISPATCH_STEPS[step] || isSub) && (
+          <>
+          {step === 0 && (
+            <Step1Orders
+              regularOrders={regularOrders}
+              setRegularOrders={setRegularOrders}
+              gcOrders={gcOrders}
+              setGcOrders={setGcOrders}
+              draftRunId={draftRunId}
+              readOnly={gaHasRun}
+              {...stepProps}
+            />
+          )}
+          {step === 1 && (
+            <Step2Capacity
+              selectedRegularIds={selectedRegularIds}
+              selectedGcIds={selectedGcIds}
+              knownOrdersMap={knownOrdersMap}
+              priorityConfig={priorityConfig}
+              onPriorityConfigChange={setPriorityConfig}
+              workingHoursPerDay={workingHoursPerDay}
+              onWorkingHoursChange={setWorkingHoursPerDay}
+              capChoices={capChoices}
+              onCapChoicesChange={setCapChoices}
+              importedTargetQty={importedTargetQty}
+              onImportedTargetQtyChange={setImportedTargetQty}
+              draftRunId={draftRunId}
+              onLoadingChange={setStep2Loading}
+              readOnly={gaHasRun}
+              {...stepProps}
+            />
+          )}
+          {step === 2 && (
+            <Step3MaterialETA
+              selectedIds={allSelectedIds}
+              materialEtaOverrides={materialEtaOverrides}
+              setMaterialEtaOverrides={setMaterialEtaOverrides}
+              draftRunId={draftRunId}
+              readOnly={gaHasRun}
+              {...stepProps}
+            />
+          )}
+          {step === 3 && (
+            <Step4GCDates
+              gcOrders={gcOrders}
+              gcDateOverrides={gcDateOverrides}
+              setGcDateOverrides={setGcDateOverrides}
+              draftRunId={draftRunId}
+              readOnly={gaHasRun}
+              {...stepProps}
+            />
+          )}
+          {step === 4 && (
+            <Step5RunGA
+              selectedIds={allSelectedIds}
+              excludeLines={excludeLines}
+              materialEtaOverrides={materialEtaOverrides}
+              gcDateOverrides={gcDateOverrides}
+              priorityConfig={priorityConfig}
+              workingHoursPerDay={workingHoursPerDay}
+              label={label}
+              setLabel={setLabel}
+              runId={runId}
+              setRunId={setRunId}
+              draftRunId={draftRunId}
+              canAdvance={canAdvanceFromCurrent}
+              {...stepProps}
+            />
+          )}
+          {step === 5 && (
+            <Step6Edit runId={runId} draftRunId={draftRunId} {...stepProps} />
+          )}
+          {step === 6 && (
+            <Step7Confirm runId={runId} draftRunId={draftRunId} label={label} onPrev={handlePrev} />
+          )}
+          </>
         )}
-        {step === 2 && (
-          <Step3MaterialETA
-            selectedIds={allSelectedIds}
-            materialEtaOverrides={materialEtaOverrides}
-            setMaterialEtaOverrides={setMaterialEtaOverrides}
-            draftRunId={draftRunId}
-            readOnly={gaHasRun}
-            {...stepProps}
-          />
-        )}
-        {step === 3 && (
-          <Step4GCDates
-            gcOrders={gcOrders}
-            gcDateOverrides={gcDateOverrides}
-            setGcDateOverrides={setGcDateOverrides}
-            draftRunId={draftRunId}
-            readOnly={gaHasRun}
-            {...stepProps}
-          />
-        )}
-        {step === 4 && (
-          <Step5RunGA
-            selectedIds={allSelectedIds}
-            excludeLines={excludeLines}
-            materialEtaOverrides={materialEtaOverrides}
-            gcDateOverrides={gcDateOverrides}
-            priorityConfig={priorityConfig}
-            workingHoursPerDay={workingHoursPerDay}
-            label={label}
-            setLabel={setLabel}
-            runId={runId}
-            setRunId={setRunId}
-            draftRunId={draftRunId}
-            canAdvance={canAdvanceFromCurrent}
-            {...stepProps}
-          />
-        )}
-        {step === 5 && (
-          <Step6Edit runId={runId} draftRunId={draftRunId} {...stepProps} />
-        )}
-        {step === 6 && (
-          <Step7Confirm runId={runId} draftRunId={draftRunId} label={label} onPrev={handlePrev} />
-        )}
+
         </div>
       </div>
     </div>
