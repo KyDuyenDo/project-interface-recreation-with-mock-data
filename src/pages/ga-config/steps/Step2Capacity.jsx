@@ -434,6 +434,7 @@ export default function Step2Capacity({
   onPrev, onNext,
   onLoadingChange,
   readOnly = false,
+  dispatchBlocked = false,
 }) {
   const [dateRange,  setDateRange]  = useState(getDefaultRange);
   const [activeTab,  setActiveTab]  = useState(
@@ -798,16 +799,30 @@ export default function Step2Capacity({
         </button>
         <div className="flex-1" />
         <span className="text-xs text-gray-400">Cấu hình tự lưu khi chuyển bước</span>
-        <button
-          disabled={freqLoading || extFreqLoading}
-          className={`${BTN} bg-blue-600 text-white border-blue-600 hover:bg-blue-700`}
-          onClick={onNext}>
-          {freqLoading || extFreqLoading ? (
-            <>Đang tải dữ liệu... <Loader2 size={14} className="animate-spin ml-1 inline" /></>
-          ) : (
-            <>Bước tiếp <ChevronRight size={14} /></>
+        <div className="relative group">
+          <button
+            disabled={freqLoading || extFreqLoading || dispatchBlocked}
+            className={[
+              BTN,
+              dispatchBlocked
+                ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                : "bg-blue-600 text-white border-blue-600 hover:bg-blue-700",
+            ].join(" ")}
+            onClick={onNext}>
+            {freqLoading || extFreqLoading ? (
+              <>Đang tải dữ liệu... <Loader2 size={14} className="animate-spin ml-1 inline" /></>
+            ) : (
+              <>Bước tiếp <ChevronRight size={14} /></>
+            )}
+          </button>
+          {dispatchBlocked && (
+            <div className="absolute bottom-full right-0 mb-2 w-64 px-3 py-2 rounded-lg bg-gray-900 text-white text-xs shadow-lg pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50">
+              <span className="font-semibold text-amber-300">⏳ Đang chờ Sub-Planner xác nhận.</span>
+              <br />Chuyển sang tab <strong>"Theo dõi Sub-Planner"</strong> để xem trạng thái.
+              <div className="absolute top-full right-4 border-4 border-transparent border-t-gray-900" />
+            </div>
           )}
-        </button>
+        </div>
       </div>
     </div>
   );

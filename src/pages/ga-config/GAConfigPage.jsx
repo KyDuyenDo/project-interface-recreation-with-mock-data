@@ -431,9 +431,31 @@ export default function GAConfigPage() {
     wizardStateApi.saveWizardStep(draftRunId, step).catch(() => {});
   }, [draftRunId, step]);
 
+  // ── Dispatch gate: steps 2 and 6 require all subs to confirm before advancing
+  const isDispatchGatedStep = step === 1 || step === 5; // wizard index 1 = step2, 5 = step6
+  const dispatchGateRunId   = step === 5 ? runId : draftRunId;
+  const dispatchGateStepNum = DISPATCH_STEPS[step]; // 2 or 6
+
+  const { data: dispatchGateStatus } = useQuery({
+    queryKey:        ["dispatch-status", dispatchGateRunId, dispatchGateStepNum],
+    queryFn:         () => http.get(`/runs/${dispatchGateRunId}/dispatch-status`, { params: { step: dispatchGateStepNum } }).then(r => r.data),
+    enabled:         isDispatchGatedStep && !!dispatchGateRunId && !isSub,
+    refetchInterval: 5000,
+  });
+
+  // Block only when: dispatch sent AND not all planners confirmed yet
+  const dispatchBlocked = isDispatchGatedStep && !isSub && (() => {
+    if (!dispatchGateStatus?.dispatched) return false;
+    const planners       = dispatchGateStatus.planners || [];
+    const confirmedCount = planners.filter(p => p.status === "confirmed").length;
+    return confirmedCount < planners.length;
+  })();
+
   // ── Step navigation constraints ────────────────────────────────────────────
   function canNavigateTo(target) {
     if (step === 1 && step2Loading && target > 1) return false;
+    // Block forward nav from gated steps when dispatch not fully confirmed
+    if (dispatchBlocked && target > step) return false;
     const maxReachable = completedUpTo + 1;
     // While GA is actively running, block navigation to steps 0-3
     if (runStatus === "running" && target < 4) return false;
@@ -446,7 +468,7 @@ export default function GAConfigPage() {
   }
 
   // Step 4 = RunGA — must wait for run to finish before advancing to edit/confirm
-  const canAdvanceFromCurrent = (step !== 4 || runDone) && !(step === 1 && step2Loading);
+  const canAdvanceFromCurrent = (step !== 4 || runDone) && !(step === 1 && step2Loading) && !dispatchBlocked;
 
   function handleNext() {
     if (!canAdvanceFromCurrent) return;
@@ -597,6 +619,7 @@ export default function GAConfigPage() {
               draftRunId={draftRunId}
               onLoadingChange={setStep2Loading}
               readOnly={gaHasRun}
+              dispatchBlocked={dispatchBlocked}
               {...stepProps}
             />
           )}
@@ -638,7 +661,7 @@ export default function GAConfigPage() {
             />
           )}
           {step === 5 && (
-            <Step6Edit runId={runId} draftRunId={draftRunId} {...stepProps} />
+            <Step6Edit runId={runId} draftRunId={draftRunId} dispatchBlocked={dispatchBlocked} {...stepProps} />
           )}
           {step === 6 && (
             <Step7Confirm runId={runId} draftRunId={draftRunId} label={label} onPrev={handlePrev} />

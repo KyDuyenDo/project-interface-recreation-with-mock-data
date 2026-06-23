@@ -122,7 +122,7 @@ const ACTION_LABELS = {
   qty_change: "Sửa số lượng",
 };
 
-export default function Step6Edit({ runId, capacityOverrides, onPrev, onNext }) {
+export default function Step6Edit({ runId, capacityOverrides, onPrev, onNext, dispatchBlocked = false }) {
   const [tab,          setTab]          = useState("overview");
   const [localChunks,  setLocalChunks]  = useState(null);
   const [edits,        setEdits]        = useState({});
@@ -468,9 +468,26 @@ export default function Step6Edit({ runId, capacityOverrides, onPrev, onNext }) 
             <CheckCircle2 size={12} /> Đã lưu
           </span>
         )}
-        <button className={`${BTN} bg-blue-600 text-white border-blue-600 hover:bg-blue-700`} onClick={onNext}>
-          Bước tiếp <ChevronRight size={14} />
-        </button>
+        <div className="relative group">
+          <button
+            disabled={dispatchBlocked}
+            className={[
+              BTN,
+              dispatchBlocked
+                ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                : "bg-blue-600 text-white border-blue-600 hover:bg-blue-700",
+            ].join(" ")}
+            onClick={onNext}>
+            Bước tiếp <ChevronRight size={14} />
+          </button>
+          {dispatchBlocked && (
+            <div className="absolute bottom-full right-0 mb-2 w-64 px-3 py-2 rounded-lg bg-gray-900 text-white text-xs shadow-lg pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50">
+              <span className="font-semibold text-amber-300">⏳ Đang chờ Sub-Planner xác nhận.</span>
+              <br />Chuyển sang tab <strong>"Theo dõi Sub-Planner"</strong> để xem trạng thái.
+              <div className="absolute top-full right-4 border-4 border-transparent border-t-gray-900" />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
