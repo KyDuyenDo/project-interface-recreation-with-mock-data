@@ -1,10 +1,10 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, X, Check, Lock, Eye, Loader2 } from "lucide-react";
+import { ArrowLeft, X, Check, Lock, Eye, Loader2, Zap } from "lucide-react";
 import { useRunStatus, useRunDetail } from "../../hooks/useRuns";
 import { wizardStateApi, runsApi } from "../../api";
-
+import { initializeMockData } from "./mockData";
 
 import Step1Orders      from "./steps/Step1Orders";
 import Step2Capacity    from "./steps/Step2Capacity";
@@ -93,29 +93,33 @@ export default function GAConfigPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const resumeId = searchParams.get("resume") ? parseInt(searchParams.get("resume"), 10) : null;
 
+  // Check for mock mode in URL: ?mock=true
+  const useMockMode = searchParams.get("mock") === "true";
+  const mockData = useMockMode ? initializeMockData() : null;
+
   // Wizard state
   const [step,                setStep]                = useState(() => {
     const s = parseInt(searchParams.get("step"), 10);
     return isNaN(s) ? 0 : Math.min(Math.max(s, 0), 6);
   });
-  const [completedUpTo,       setCompletedUpTo]       = useState(-1);
-  const [label,               setLabel]               = useState("");
+  const [completedUpTo,       setCompletedUpTo]       = useState(useMockMode ? 3 : -1);
+  const [label,               setLabel]               = useState("Mock Kế hoạch");
 
   // Orders: two separate panels
-  const [regularOrders, setRegularOrders] = useState([]); // [{order_id, order:{...}}]
-  const [gcOrders,      setGcOrders]      = useState([]); // [{order_id, order:{...}}]
+  const [regularOrders, setRegularOrders] = useState(useMockMode ? mockData.regularOrders : []); // [{order_id, order:{...}}]
+  const [gcOrders,      setGcOrders]      = useState(useMockMode ? mockData.gcOrders : []); // [{order_id, order:{...}}]
 
   const [excludeLines] = useState(new Set());
-  const [materialEtaOverrides, setMaterialEtaOverrides] = useState({});
-  const [gcDateOverrides,      setGcDateOverrides]      = useState({});
+  const [materialEtaOverrides, setMaterialEtaOverrides] = useState(useMockMode ? mockData.materialEtaOverrides : {});
+  const [gcDateOverrides,      setGcDateOverrides]      = useState(useMockMode ? mockData.gcDateOverrides : {});
   const [runId,               setRunId]               = useState(null);
   const [draftRunId,          setDraftRunId]          = useState(null);
-  const [priorityConfig,      setPriorityConfig]      = useState({});
-  const [workingHoursPerDay,  setWorkingHoursPerDay]  = useState(8);
-  const [capChoices,          setCapChoices]          = useState({ regular: {}, gc: {}, noHistRegular: {}, noHistGc: {} });
-  const [importedTargetQty,   setImportedTargetQty]   = useState({});
+  const [priorityConfig,      setPriorityConfig]      = useState(useMockMode ? mockData.priorityConfig : {});
+  const [workingHoursPerDay,  setWorkingHoursPerDay]  = useState(useMockMode ? mockData.workingHoursPerDay : 8);
+  const [capChoices,          setCapChoices]          = useState(useMockMode ? mockData.capChoices : { regular: {}, gc: {}, noHistRegular: {}, noHistGc: {} });
+  const [importedTargetQty,   setImportedTargetQty]   = useState(useMockMode ? mockData.importedTargetQty : {});
 
-  const [isLoadedFromServer, setIsLoadedFromServer] = useState(false);
+  const [isLoadedFromServer, setIsLoadedFromServer] = useState(useMockMode); // Skip backend for mock mode
   const [step2Loading,       setStep2Loading]       = useState(false);
 
   // Sync step → URL so each step has its own URL (browser history, refresh-safe)
@@ -191,10 +195,15 @@ export default function GAConfigPage() {
       });
   }, [resumeId, draftRunId]);
 
-  // Create a draft run on first mount (skip if resuming)
+  // Create a draft run on first mount (skip if resuming or using mock mode)
   const draftCreated = useRef(false);
   useEffect(() => {
     if (resumeId) return; // resuming — skip creating new draft
+    if (useMockMode) {
+      // In mock mode, generate a dummy draft ID
+      setDraftRunId(9999);
+      return;
+    }
     if (draftCreated.current) return;
     draftCreated.current = true;
     wizardStateApi.createDraft("").then((res) => {
@@ -203,41 +212,41 @@ export default function GAConfigPage() {
     }).catch(() => {
       // Non-fatal: wizard works without persistence if draft creation fails
     });
-  }, [resumeId]);
+  }, [resumeId, useMockMode]);
 
   // ── Debounced auto-save effects ──────────────────────────────────────────
   // Step 2 (capacity/priority/new-model-targets) is handled by Step2Capacity's
   // own 400ms auto-save. Only auto-save the steps that have no child component save.
 
-  // Save Step 1 Orders
+  // Save Step 1 Orders (skip in mock mode)
   useEffect(() => {
-    if (!isLoadedFromServer || !draftRunId) return;
+    if (!isLoadedFromServer || !draftRunId || useMockMode) return;
     const timer = setTimeout(() => {
       wizardStateApi.putOrders(draftRunId, { regular: regularOrders, gc: gcOrders })
         .catch(() => {});
     }, 800);
     return () => clearTimeout(timer);
-  }, [draftRunId, regularOrders, gcOrders, isLoadedFromServer]);
+  }, [draftRunId, regularOrders, gcOrders, isLoadedFromServer, useMockMode]);
 
-  // Save Step 3 Material ETA Overrides
+  // Save Step 3 Material ETA Overrides (skip in mock mode)
   useEffect(() => {
-    if (!isLoadedFromServer || !draftRunId) return;
+    if (!isLoadedFromServer || !draftRunId || useMockMode) return;
     const timer = setTimeout(() => {
       wizardStateApi.putMaterialEtas(draftRunId, { overrides: materialEtaOverrides })
         .catch(() => {});
     }, 800);
     return () => clearTimeout(timer);
-  }, [draftRunId, materialEtaOverrides, isLoadedFromServer]);
+  }, [draftRunId, materialEtaOverrides, isLoadedFromServer, useMockMode]);
 
-  // Save Step 4 GC Date Overrides
+  // Save Step 4 GC Date Overrides (skip in mock mode)
   useEffect(() => {
-    if (!isLoadedFromServer || !draftRunId) return;
+    if (!isLoadedFromServer || !draftRunId || useMockMode) return;
     const timer = setTimeout(() => {
       wizardStateApi.putGcDates(draftRunId, { gc_dates: gcDateOverrides })
         .catch(() => {});
     }, 800);
     return () => clearTimeout(timer);
-  }, [draftRunId, gcDateOverrides, isLoadedFromServer]);
+  }, [draftRunId, gcDateOverrides, isLoadedFromServer, useMockMode]);
 
   // Helper to save step state on transition / exit
   const saveStepState = useCallback((stepToSave) => {
@@ -300,11 +309,11 @@ export default function GAConfigPage() {
   const runDone   = runStatus === "done";
   const gaHasRun  = runId != null; // GA was triggered (may still be running)
 
-  // Persist wizard step when it changes
+  // Persist wizard step when it changes (skip in mock mode)
   useEffect(() => {
-    if (!draftRunId) return;
+    if (!draftRunId || useMockMode) return;
     wizardStateApi.saveWizardStep(draftRunId, step).catch(() => {});
-  }, [draftRunId, step]);
+  }, [draftRunId, step, useMockMode]);
 
   // ── Step navigation constraints ────────────────────────────────────────────
   function canNavigateTo(target) {
@@ -396,14 +405,32 @@ export default function GAConfigPage() {
           </div>
         </div>
         <div className="flex-1" />
+        {useMockMode && (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
+            <Zap size={11} /> Mock Mode
+          </span>
+        )}
         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
           <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />Nháp
         </span>
-        <button
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-transparent text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
-          onClick={discardDraft}>
-          <X size={13} /> Hủy nháp
-        </button>
+        {useMockMode ? (
+          <button
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-transparent text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+            onClick={() => {
+              const params = new URLSearchParams(searchParams);
+              params.delete("mock");
+              params.set("step", "0");
+              setSearchParams(params);
+            }}>
+            <X size={13} /> Thoát Mock
+          </button>
+        ) : (
+          <button
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-transparent text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+            onClick={discardDraft}>
+            <X size={13} /> Hủy nháp
+          </button>
+        )}
       </header>
 
       {/* Step indicator */}

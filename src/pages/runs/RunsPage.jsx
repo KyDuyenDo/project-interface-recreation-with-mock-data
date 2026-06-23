@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   Plus, Package, Eye, Loader2, Check, Calendar,
   AlertTriangle, Trash2, PlayCircle, CheckSquare, Square,
-  ChevronLeft, ChevronRight, X,
+  ChevronLeft, ChevronRight, X, Zap,
 } from "lucide-react";
 import { clsx } from "clsx";
 import { useRuns, useActiveRun, useSchedulePeriods, useDeleteRun } from "../../hooks";
@@ -514,6 +514,11 @@ export default function RunsPage() {
           <div className="text-xs text-gray-400 mt-0.5">TailFollow + ILS · lập lịch tự động theo đuôi chuyền</div>
         </div>
         <div className="flex-1" />
+        <button
+          className={`${BTN} bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100`}
+          onClick={() => navigate("/runs/new?mock=true")}>
+          <Zap size={14} /> Mock Mode
+        </button>
         <button
           className={`${BTN} bg-blue-600 text-white border-blue-600 hover:bg-blue-700`}
           onClick={() => navigate("/runs/new")}>
