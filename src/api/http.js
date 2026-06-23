@@ -116,7 +116,22 @@ function route(method, url, body, config) {
       const task = M.MOCK_TASK_ASSIGNMENTS.find(t => t.id === id);
       if (task) {
         task.status = "rejected";
+        task.reject_reason = body?.reason ?? null;
         task.note = body?.note ?? task.note;
+        // Notify main planner
+        const REASON_LABELS = { wrong_model: "Sai dạng giày", no_capacity: "Không đủ năng lực" };
+        const reasonLabel = REASON_LABELS[body?.reason] || body?.reason || "không xác định";
+        M.MOCK_NOTIFICATIONS.push({
+          id: M.MOCK_NOTIFICATIONS.length + 1,
+          to_username: "tran.minh",
+          kind: "task_rejected",
+          title: `Từ chối đơn ${task.order_id || "(lịch)"} — ${reasonLabel}`,
+          body: `${task.planner_name} từ chối chuyền ${task.line_id}: "${reasonLabel}". ${body?.note ? "Ghi chú: " + body.note : ""}`,
+          run_id: task.run_id,
+          step: task.step,
+          is_read: false,
+          created_at: new Date().toISOString(),
+        });
       }
       return ok({ ok: true });
     }
@@ -214,14 +229,40 @@ function route(method, url, body, config) {
   if (p[0] === "runs" && p[2] === "step-approvals") {
     const runId = parseInt(p[1]);
     if (m === "POST") {
-      const { step, planner_username, status } = body || {};
-      // Update matching tasks
+      const { step, planner_username, line_id, status, reject_reason, note } = body || {};
+      const REASON_LABELS = { wrong_model: "Sai dạng giày", no_capacity: "Không đủ năng lực" };
+      // Update matching tasks (filter by line_id if provided)
       M.MOCK_TASK_ASSIGNMENTS
-        .filter(t => t.run_id === runId && t.step === step && t.planner_username === planner_username)
+        .filter(t =>
+          t.run_id === runId &&
+          t.step === step &&
+          t.planner_username === planner_username &&
+          (!line_id || t.line_id === line_id)
+        )
         .forEach(t => {
           t.status = status;
           if (status === "confirmed") t.confirmed_at = new Date().toISOString();
+          if (status === "rejected") {
+            t.reject_reason = reject_reason || null;
+            t.note = note || null;
+          }
         });
+      // Notify main planner on rejection
+      if (status === "rejected") {
+        const subUser = M.MOCK_USERS[planner_username];
+        const reasonLabel = REASON_LABELS[reject_reason] || reject_reason || "không xác định";
+        M.MOCK_NOTIFICATIONS.push({
+          id: M.MOCK_NOTIFICATIONS.length + 1,
+          to_username: "tran.minh",
+          kind: "task_rejected",
+          title: `Từ chối chuyền ${line_id || "?"} — ${reasonLabel}`,
+          body: `${subUser?.full_name || planner_username} từ chối kế hoạch chuyền ${line_id} (Run #${runId}): "${reasonLabel}".${note ? " Ghi chú: " + note : ""}`,
+          run_id: runId,
+          step,
+          is_read: false,
+          created_at: new Date().toISOString(),
+        });
+      }
       return ok({ ok: true });
     }
     // GET — return approval status per step

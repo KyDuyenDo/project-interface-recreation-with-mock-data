@@ -1,0 +1,186 @@
+# Thiết kế Card Run và Trang Chi Tiết cho Sub-Planner
+
+## 1. Card Run (Màn hình danh sách)
+
+Mỗi card đại diện cho một Run được Main Planner phân công cho Sub-Planner.
+
+### Thông tin hiển thị trên card
+
+* Mã Run
+* Tên Run (nếu có)
+* Thời gian thực hiện
+* Tổng số đơn hàng
+* Tổng sản lượng
+* Trạng thái xác nhận
+
+### Danh sách chuyền được phân công
+
+Hiển thị trực tiếp trên card các chuyền mà Sub-Planner chịu trách nhiệm trong Run này.
+
+Ví dụ:
+
+```text
+Run: R2026-001
+
+Assigned Lines:
+B_L01
+B_L02
+
+Total Orders: 15
+Total Qty: 12,500
+Status: Pending Review
+```
+
+Mục đích:
+
+* Sub-Planner biết ngay mình đang phụ trách những chuyền nào trong Run này.
+* Không cần mở chi tiết mới biết được phạm vi trách nhiệm.
+
+---
+
+## 2. Điều hướng vào trang chi tiết Run
+
+Khi bấm vào card Run:
+
+```text
+Run Card
+    ↓
+Run Detail Page
+```
+
+Không mở popup hoặc drawer.
+
+Chuyển sang một trang chi tiết riêng.
+
+---
+
+## 3. Giao diện trang chi tiết
+
+Nếu Sub-Planner được giao nhiều chuyền trong cùng một Run thì hiển thị tab theo từng chuyền.
+
+Ví dụ:
+
+```text
+┌──────────────────────────────┐
+│ B_L01 │ B_L02 │ B_L03 │
+└──────────────────────────────┘
+```
+
+Mỗi tab tương ứng với một chuyền được giao trong Run.
+
+---
+
+## 4. Hành vi của tab
+
+Toàn bộ giao diện của các tab là giống nhau.
+
+Chỉ khác dữ liệu được lọc theo chuyền tương ứng.
+
+Ví dụ:
+
+### Tab B_L01
+
+Chỉ hiển thị:
+
+* Đơn hàng của B_L01
+* Công suất của B_L01
+* Biểu đồ tải của B_L01
+* Đơn chính/phụ của B_L01
+
+---
+
+### Tab B_L02
+
+Chỉ hiển thị:
+
+* Đơn hàng của B_L02
+* Công suất của B_L02
+* Biểu đồ tải của B_L02
+* Đơn chính/phụ của B_L02
+
+---
+
+## 5. Nội dung bên trong mỗi tab
+
+### A. Thông tin chuyền
+
+* Mã chuyền
+* Công suất mục tiêu
+* Tỷ lệ sử dụng hiện tại
+* Trạng thái đánh giá
+
+---
+
+### B. Biểu đồ công suất
+
+Khoảng thời gian:
+
+* 30 ngày trước hiện tại
+* Đến các ngày sản xuất tương lai đã được lên lịch
+
+Hiển thị:
+
+* Công suất mục tiêu
+* Sản lượng đã được phân bổ
+
+Biểu đồ cột thể hiện mức độ sử dụng công suất theo ngày.
+
+---
+
+### C. Đơn hàng chuyền chính
+
+Danh sách các đơn mà chuyền này là chuyền sản xuất chính.
+
+Thông tin:
+
+* Order No
+* Article
+* Model
+* Qty
+* Deadline
+* Ngày sản xuất
+
+---
+
+### D. Đơn hàng chuyền phụ
+
+Danh sách các đơn mà chuyền này tham gia hỗ trợ.
+
+Thông tin:
+
+* Order No
+* Article
+* Model
+* Qty hỗ trợ
+* Chuyền chính tương ứng
+* Ngày sản xuất
+
+---
+
+### E. Đánh giá kế hoạch
+
+Sub-Planner có thể:
+
+#### Chấp nhận
+
+Xác nhận chuyền có thể thực hiện kế hoạch.
+
+#### Từ chối do sai model
+
+Ví dụ:
+
+"Model này không phù hợp với năng lực của chuyền."
+
+#### Từ chối do quá tải
+
+Ví dụ:
+
+"Sản lượng được phân công vượt quá năng lực của chuyền trong giai đoạn này."
+
+Sau khi gửi phản hồi:
+
+* Main Planner nhận thông báo.
+* Main Planner xem lý do từ chối.
+* Main Planner điều chỉnh lại kế hoạch nếu cần.
+
+Sub-Planner không được chỉnh sửa kế hoạch trực tiếp.

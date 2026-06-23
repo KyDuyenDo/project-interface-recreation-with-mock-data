@@ -18,6 +18,7 @@ import MaterialPage from "./pages/material/MaterialPage";
 import ThroughputPage from "./pages/throughput/ThroughputPage";
 import NewModelsPage from "./pages/new-models/NewModelsPage";
 import SubPlannerWorkspace from "./pages/sub-planner/SubPlannerWorkspace";
+import RunDetailForSub from "./pages/sub-planner/RunDetailForSub";
 import LineAssignmentPage from "./pages/line-management/LineAssignmentPage";
 
 const queryClient = new QueryClient({
@@ -56,7 +57,7 @@ function AppShell() {
           <Route path="/throughput" element={<ThroughputPage />} />
           <Route path="/new-models" element={<NewModelsPage />} />
           <Route path="/my-tasks" element={<SubPlannerWorkspace />} />
-          <Route path="/my-tasks/:step" element={<SubPlannerWorkspace />} />
+          <Route path="/my-tasks/:runId" element={<RunDetailForSub />} />
           <Route path="/line-assignments" element={<LineAssignmentPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

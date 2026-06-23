@@ -824,14 +824,32 @@ export function makeLineCapacityData(lineIds = [], capacityPerDay = 1200) {
 // In-memory store for tasks assigned by main-planner to sub-planners
 export let MOCK_TASK_ASSIGNMENTS = (() => {
   const tasks = [];
-  // Step 2 tasks — line assignment
+
+  // Run meta (used for display on cards)
+  const RUN_META = {
+    48: { run_id: 48, run_label: "run_20260622_active", period_label: "Tháng 6/2026",
+          started_at: addDays(TODAY, -2).toISOString(), step_label: "Ưu tiên & Chuyền" },
+    47: { run_id: 47, run_label: "run_20260620_verify", period_label: "Tháng 6/2026",
+          started_at: addDays(TODAY, -5).toISOString(), step_label: "Review lịch" },
+  };
+  Object.assign(tasks, { _runMeta: RUN_META }); // attach for http.js to read
+
+  // Step 2 tasks — primary + support orders per line
   Object.values(MOCK_LINE_ASSIGNMENTS).forEach((la, i) => {
     const runId = 48;
-    const ordersForLine = WIZARD_REGULAR_SOURCES.slice(i * 3, i * 3 + 3);
-    ordersForLine.forEach((r, oi) => {
+    // 3 primary orders + 1 support order per line
+    const primaryOrders = WIZARD_REGULAR_SOURCES.slice(i * 3, i * 3 + 3);
+    const supportOrder  = WIZARD_REGULAR_SOURCES[(i * 3 + 12) % WIZARD_REGULAR_SOURCES.length];
+
+    primaryOrders.forEach((r, oi) => {
+      const prodStart = addDays(TODAY, ri(-5, 10));
+      const prodEnd   = addDays(prodStart, ri(5, 14));
       tasks.push({
         id: tasks.length + 1,
         run_id: runId,
+        run_label: RUN_META[runId].run_label,
+        period_label: RUN_META[runId].period_label,
+        run_started_at: RUN_META[runId].started_at,
         step: 2,
         step_label: "Ưu tiên & Chuyền",
         planner_username: la.planner_username,
@@ -843,19 +861,64 @@ export let MOCK_TASK_ASSIGNMENTS = (() => {
         customer: r.CUSTNAME,
         qty: r.QTY,
         crd: r.CRD,
-        status: oi === 0 ? "confirmed" : oi === 1 ? "pending" : "pending",
+        prod_start: isoDate(prodStart),
+        prod_end:   isoDate(prodEnd),
+        is_support: false,
+        main_line_id: null,
+        status: oi === 0 ? "confirmed" : "pending",
+        reject_reason: null,
         qty_override: null,
         confirmed_at: oi === 0 ? addDays(TODAY, -1).toISOString() : null,
         note: null,
         created_at: addDays(TODAY, -2).toISOString(),
       });
     });
+
+    // 1 support order (this line assists another line's primary order)
+    const prodStart = addDays(TODAY, ri(2, 15));
+    const prodEnd   = addDays(prodStart, ri(3, 8));
+    const supportLineIndex = (i + 1) % Object.values(MOCK_LINE_ASSIGNMENTS).length;
+    const mainLine = Object.values(MOCK_LINE_ASSIGNMENTS)[supportLineIndex].line_id;
+    tasks.push({
+      id: tasks.length + 1,
+      run_id: runId,
+      run_label: RUN_META[runId].run_label,
+      period_label: RUN_META[runId].period_label,
+      run_started_at: RUN_META[runId].started_at,
+      step: 2,
+      step_label: "Ưu tiên & Chuyền",
+      planner_username: la.planner_username,
+      planner_name: la.planner_name,
+      line_id: la.line_id,
+      order_id: supportOrder.RY,
+      article: supportOrder.Article,
+      model: supportOrder.XieMing,
+      customer: supportOrder.CUSTNAME,
+      qty: Math.round(supportOrder.QTY * 0.3),
+      crd: supportOrder.CRD,
+      prod_start: isoDate(prodStart),
+      prod_end:   isoDate(prodEnd),
+      is_support: true,
+      main_line_id: mainLine,
+      status: "pending",
+      reject_reason: null,
+      qty_override: null,
+      confirmed_at: null,
+      note: null,
+      created_at: addDays(TODAY, -2).toISOString(),
+    });
   });
-  // Step 6 tasks — schedule review
+
+  // Step 6 tasks — schedule review (one task per line, not per order)
   Object.values(MOCK_LINE_ASSIGNMENTS).forEach((la, i) => {
+    const prodStart = addDays(TODAY, ri(-10, 0));
+    const prodEnd   = addDays(TODAY, ri(15, 45));
     tasks.push({
       id: tasks.length + 1,
       run_id: 47,
+      run_label: RUN_META[47].run_label,
+      period_label: RUN_META[47].period_label,
+      run_started_at: RUN_META[47].started_at,
       step: 6,
       step_label: "Review lịch",
       planner_username: la.planner_username,
@@ -867,13 +930,19 @@ export let MOCK_TASK_ASSIGNMENTS = (() => {
       customer: null,
       qty: null,
       crd: null,
+      prod_start: isoDate(prodStart),
+      prod_end:   isoDate(prodEnd),
+      is_support: false,
+      main_line_id: null,
       status: i % 2 === 0 ? "confirmed" : "pending",
+      reject_reason: null,
       qty_override: null,
       confirmed_at: i % 2 === 0 ? addDays(TODAY, -1).toISOString() : null,
       note: null,
       created_at: addDays(TODAY, -3).toISOString(),
     });
   });
+
   return tasks;
 })();
 
