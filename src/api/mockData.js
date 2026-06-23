@@ -745,6 +745,81 @@ export function makeScheduleDaily(runId, targetDate) {
   return { orders, date };
 }
 
+// ── Line capacity / schedule data ────────────────────────────────────────────
+// Generates daily production data for a list of lines spanning 30 days before
+// today through all future scheduled dates (up to +90 days).
+// Each day entry: { date, is_today, is_past, orders: [{ order_id, article, model, customer, qty, crd }] }
+export function makeLineCapacityData(lineIds = [], capacityPerDay = 1200) {
+  const lines = (Array.isArray(lineIds) ? lineIds : [lineIds]).filter(Boolean);
+  const byLine = {};
+
+  lines.forEach((lineId, li) => {
+    const fprefix = lineId.split("_")[0]; // "B", "C", "A"
+    // Pool of orders for this line (from BAO_CAO_ALL)
+    const pool = BAO_CAO_ALL.filter(r => r.LEAN && r.LEAN.startsWith(fprefix + "_"))
+      .concat(BAO_CAO_ALL.slice(li * 40, li * 40 + 40));
+
+    // We'll map dates (-30 … +90) to order slots
+    // Build a set of "order spans": each order occupies consecutive days based on qty / capacity
+    const spans = []; // { order_id, model, article, customer, qty, crd, startDay, endDay }
+    let dayOffset = -28; // start from 28 days ago
+    const ordersToPlace = pool.slice(0, 12);
+
+    ordersToPlace.forEach((r, oi) => {
+      const daysNeeded = Math.max(1, Math.ceil((r.QTY * 0.6) / capacityPerDay));
+      const start = dayOffset;
+      const end   = dayOffset + daysNeeded - 1;
+      spans.push({
+        order_id: r.RY,
+        article:  r.Article,
+        model:    r.XieMing,
+        customer: r.CUSTNAME,
+        qty_total: r.QTY,
+        crd:      r.CRD,
+        startDay: start,
+        endDay:   end,
+      });
+      dayOffset = end + ri(0, 2); // 0-2 day gap between orders
+    });
+
+    // Figure out the range of days to emit
+    const maxFutureDay = Math.max(90, spans.length ? spans[spans.length - 1].endDay + 5 : 90);
+    const minDay = -30;
+    const todayMs = TODAY.getTime();
+
+    const days = [];
+    for (let d = minDay; d <= maxFutureDay; d++) {
+      const dt = addDays(TODAY, d);
+      const dateStr = isoDate(dt);
+      const isPast  = d < 0;
+      const isToday = d === 0;
+
+      // Find orders active on this day
+      const ordersOnDay = spans
+        .filter(sp => d >= sp.startDay && d <= sp.endDay)
+        .map(sp => {
+          // Daily qty for this order on this day
+          const daysTotal = sp.endDay - sp.startDay + 1;
+          const dailyQty = Math.round(Math.min(sp.qty_total * 0.6 / daysTotal, capacityPerDay * 0.8));
+          return {
+            order_id: sp.order_id,
+            article:  sp.article,
+            model:    sp.model,
+            customer: sp.customer,
+            qty:      dailyQty,
+            crd:      sp.crd,
+          };
+        });
+
+      days.push({ date: dateStr, is_today: isToday, is_past: isPast, orders: ordersOnDay });
+    }
+
+    byLine[lineId] = { capacity_per_day: capacityPerDay, days };
+  });
+
+  return { by_line: byLine };
+}
+
 // ── Task assignments for sub-planner ─────────────────────────────────────────
 // In-memory store for tasks assigned by main-planner to sub-planners
 export let MOCK_TASK_ASSIGNMENTS = (() => {

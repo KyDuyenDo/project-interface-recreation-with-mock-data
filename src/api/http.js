@@ -202,6 +202,11 @@ function route(method, url, body, config) {
     if (p[1] === "eip") return ok(M.EIP_LINES);
     if (p[1] === "floors") return ok(M.FLOORS);
     if (p[1] === "pool") return ok(M.LINE_POOL);
+    // GET /lines/schedule?lines=B_L01,B_L02
+    if (p[1] === "schedule") {
+      const lineIds = (params.lines || "").split(",").filter(Boolean);
+      return ok(M.makeLineCapacityData(lineIds));
+    }
     return ok([]);
   }
 
