@@ -1,0 +1,50 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    @apply h-full;
+  }
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  /* ── App Shell ── */
+  .app-shell {
+    @apply grid h-screen overflow-hidden;
+    grid-template-columns: 240px 1fr;
+  }
+
+  /* ── KHX / Sheet ── */
+  .khx-cell-actions {
+    @apply absolute top-0.5 right-0.5 hidden gap-0.5 rounded bg-white/90 p-0.5 shadow;
+  }
+  .khx-cell:hover .khx-cell-actions {
+    @apply flex;
+  }
+  .khx-cell-action {
+    @apply grid h-[18px] w-[18px] cursor-pointer place-items-center rounded-sm border-0 bg-transparent text-slate-400 transition hover:bg-primary-50 hover:text-primary-600;
+  }
+
+  /* ── Throughput Matrix ── */
+  .tp-cell {
+    @apply border border-slate-200 p-0 text-center text-xs;
+  }
+  .tp-cell input {
+    @apply w-full border-0 bg-transparent px-2 py-1.5 text-right font-mono text-xs outline-none focus:bg-primary-50 focus:outline-2 focus:-outline-offset-2 focus:outline-primary-600;
+  }
+  .tp-cell.has-history { @apply bg-green-50; }
+  .tp-cell.no-history  { @apply bg-red-50 text-red-700; }
+  .tp-cell.override    { @apply bg-blue-50 font-semibold; }
+
+  /* ── Dot pulse ── */
+  .dot-pulse {
+    @apply animate-pulse;
+  }
+}

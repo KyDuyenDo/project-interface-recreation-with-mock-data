@@ -1,0 +1,291 @@
+/* === KHX Plan — CSS Grid matching Excel B廠/C廠 production schedule === */
+
+.khxplan-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: white;
+  font-family: 'Inter', 'Noto Sans SC', -apple-system, sans-serif;
+  font-size: 11px;
+  color: #222;
+}
+
+/* === Spreadsheet area === */
+.khxplan-sheet-wrap {
+  flex: 1;
+  overflow: auto;
+  background: #d0d0d0;
+}
+
+.khxplan-sheet {
+  display: grid;
+  background: #888;
+  gap: 1px;
+  width: max-content;
+}
+
+/* === Base cell === */
+.kc {
+  background: white;
+  padding: 1px 3px;
+  display: flex;
+  align-items: center;
+  font-size: 10.5px;
+  line-height: 1.2;
+  overflow: hidden;
+  white-space: nowrap;
+  color: #1a1a1a;
+  min-height: 0;
+}
+.kc.center { justify-content: center; text-align: center; }
+.kc.right  { justify-content: flex-end; text-align: right; }
+
+/* === Header rows === */
+.kc-title {
+  background: linear-gradient(135deg, #5b21b6 0%, #7c3aed 100%);
+  color: white;
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 0.3px;
+  justify-content: center;
+  position: sticky;
+  left: 0;
+  z-index: 20;
+}
+
+.kc-date {
+  background: #ffe9b8;
+  font-size: 11px;
+  font-weight: 700;
+  color: #5b4324;
+  justify-content: center;
+}
+.kc-date.sun-col { background: #dce8f5; color: #5a7fa0; }
+
+.kc-weekday {
+  background: #fff4d4;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b5024;
+  justify-content: center;
+  font-family: 'Noto Sans SC', sans-serif;
+}
+.kc-weekday.sun-col { background: #dce8f5; color: #5a7fa0; font-weight: 700; }
+
+.kc-hours {
+  background: #fff9e4;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #7a5a2a;
+  justify-content: center;
+}
+.kc-hours.sun-col { background: #dce8f5; color: #5a7fa0; }
+
+/* === LINE name column (left, sticky) === */
+.kc-line-name {
+  background: linear-gradient(180deg, #f3e8ff 0%, #ede4fa 100%);
+  border-right: 2px solid #7c3aed;
+  font-weight: 900;
+  font-size: 9px;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  justify-content: center;
+  align-items: center;
+  color: #5b21b6;
+  letter-spacing: 0.5px;
+  position: sticky;
+  left: 0;
+  z-index: 12;
+  padding: 4px 0;
+}
+
+/* === Field label column (sticky) === */
+.kc-label {
+  background: #fafafa;
+  font-size: 10px;
+  font-weight: 600;
+  color: #333;
+  padding-left: 6px;
+  justify-content: flex-start;
+  position: sticky;
+  left: 80px;
+  z-index: 11;
+  border-right: 1px solid #bbb;
+  font-style: italic;
+}
+.kc-label.bold { font-weight: 800; font-style: normal; }
+.kc-label.plan-lbl { color: #c91e1e; font-weight: 800; font-style: normal; }
+.kc-label.ton-lbl  { color: #0369a1; font-weight: 700; font-style: normal; }
+
+/* === Sunday data cells === */
+.sun-col {
+  background: #dce8f5 !important;
+  color: #8aafcc !important;
+}
+
+/* === Order field cells === */
+.kc-field { background: white; color: #1a1a1a; }
+.kc-ly    { font-weight: 700; }
+.kc-ry    { font-weight: 700; color: #111; }
+.kc-model { font-weight: 600; }
+.kc-crd,
+.kc-pd,
+.kc-material,
+.kc-customer,
+.kc-size { color: #222; }
+
+/* ngày chốt row — MAY or GO deadline */
+.kc-ngay-chot {
+  background: #fffefeba;   /* same as Excel FFFEFEBA */
+  color: #7c4a00;
+  font-weight: 600;
+  font-size: 10px;
+  justify-content: center;
+}
+.kc-ngay-chot.type-go {
+  background: #ede4fa;
+  color: #5b21b6;
+}
+
+/* blank spacer rows */
+.kc-blank { background: #fafafa; }
+
+/* === Tracking rows === */
+.kc-plan {
+  background: white;
+  color: #c91e1e;
+  font-weight: 700;
+  font-size: 10.5px;
+  justify-content: center;
+}
+.kc-actual {
+  background: white;
+  color: #111;
+  font-weight: 600;
+  font-size: 10.5px;
+  justify-content: center;
+  border-bottom: 2px solid #555 !important;
+}
+.kc-ton {
+  background: #f0f9ff;
+  color: #0369a1;
+  font-weight: 600;
+  font-size: 10px;
+  justify-content: center;
+}
+.kc-ton.pos { background: #dcfce7; color: #166534; }
+.kc-ton.neg { background: #fee2e2; color: #b91c1c; }
+
+/* special modifiers */
+.zero-val { color: #ccc; font-style: italic; }
+.order-late   { background: #fff7ed !important; }
+.order-frozen { outline: 1px solid #3b82f6; outline-offset: -1px; }
+
+/* === TOTAL row === */
+.kc-total-banner {
+  background: linear-gradient(180deg, #1e1b4b, #312974);
+  color: #fff7c2;
+  font-size: 11px;
+  font-weight: 900;
+  justify-content: center;
+  letter-spacing: 0.5px;
+  position: sticky;
+  left: 0;
+  z-index: 12;
+}
+.kc-total {
+  background: linear-gradient(180deg, #1e1b4b, #312974);
+  color: #fff7c2;
+  font-weight: 700;
+  font-size: 10.5px;
+  justify-content: center;
+}
+.kc-total.label {
+  position: sticky;
+  left: 80px;
+  z-index: 11;
+  font-weight: 800;
+  justify-content: flex-start;
+  padding-left: 8px;
+  letter-spacing: 0.3px;
+}
+.kc-total.ttl-val {
+  background: #fff7c2;
+  color: #1e1b4b;
+  font-weight: 900;
+  font-size: 11px;
+}
+
+/* TTL / SL TỒN summary cols */
+.kc-ttl {
+  background: #ede4fa;
+  color: #4a2b8a;
+  font-weight: 700;
+  font-size: 10.5px;
+  justify-content: flex-end;
+  padding-right: 5px;
+}
+.kc-slton {
+  background: #faf3ff;
+  color: #4a2b8a;
+  font-weight: 600;
+  font-size: 10px;
+  justify-content: flex-end;
+  padding-right: 5px;
+}
+
+/* Sheet tabs at bottom */
+.khxplan-tabs {
+  background: #ebe3f5;
+  border-top: 1px solid #c8b9dd;
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 8px;
+  gap: 0;
+  flex-shrink: 0;
+}
+.tab-arrows { display: flex; gap: 0; padding: 0 8px 0 0; border-right: 1px solid #c8b9dd; margin-right: 8px; }
+.tab-arrows span {
+  width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #5b21b6; cursor: pointer; border-radius: 3px; font-size: 11px;
+}
+.tab-arrows span:hover { background: rgba(124,58,237,0.1); }
+.sheet-tab {
+  height: 22px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 500;
+  color: #4a3f5e;
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  cursor: pointer;
+  border-top-left-radius: 4px;
+  border-top-right-radius: 4px;
+  margin-right: 2px;
+}
+.sheet-tab:hover:not(.active) { background: rgba(255,255,255,0.5); }
+.sheet-tab.active {
+  background: white;
+  color: #5b21b6;
+  font-weight: 700;
+  border: 1px solid #c8b9dd;
+  border-bottom-color: white;
+  position: relative;
+  top: 1px;
+  z-index: 1;
+}
+.sheet-tab.active::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #7c3aed, #5b21b6);
+  border-top-left-radius: 4px;
+  border-top-right-radius: 4px;
+}
