@@ -122,6 +122,21 @@ export default function GAConfigPage() {
   const [isLoadedFromServer, setIsLoadedFromServer] = useState(useMockMode); // Skip backend for mock mode
   const [step2Loading,       setStep2Loading]       = useState(false);
 
+  // Setup mock data for React Query when in mock mode
+  useEffect(() => {
+    if (!useMockMode || !mockData) return;
+    
+    // Set mock frequency data for useModelLineFrequency hook
+    queryClient.setQueryData(
+      ["model-line-frequency", { date_from: mockData.dateRange?.date_from || "2025-06-23", date_to: mockData.dateRange?.date_to || "2026-06-23", articles: [] }],
+      mockData.frequencyData
+    );
+    
+    // Also set for any query with those same keys
+    const queryKey = ["model-line-frequency"];
+    queryClient.setQueryData(queryKey, mockData.frequencyData);
+  }, [useMockMode, mockData, queryClient]);
+
   // Sync step → URL so each step has its own URL (browser history, refresh-safe)
   useEffect(() => {
     setSearchParams(prev => {
@@ -473,6 +488,7 @@ export default function GAConfigPage() {
             draftRunId={draftRunId}
             onLoadingChange={setStep2Loading}
             readOnly={gaHasRun}
+            useMockMode={useMockMode}
             {...stepProps}
           />
         )}

@@ -184,6 +184,79 @@ export const MOCK_IMPORTED_TARGET_QTY = {
 };
 
 /**
+ * Mock frequency data for Step 2 Capacity
+ * Array of model-line frequency stats from useModelLineFrequency hook
+ */
+export const MOCK_FREQUENCY_DATA = [
+  {
+    article: "XL100",
+    line_id: "LHGA1M01",
+    freq: 5,
+    avg_pairs_per_run: 250,
+  },
+  {
+    article: "XL100",
+    line_id: "LHGA1M02",
+    freq: 3,
+    avg_pairs_per_run: 180,
+  },
+  {
+    article: "XL100",
+    line_id: "LHGA1G01",
+    freq: 2,
+    avg_pairs_per_run: 100,
+  },
+  {
+    article: "XL101",
+    line_id: "LHGA1M03",
+    freq: 4,
+    avg_pairs_per_run: 300,
+  },
+  {
+    article: "XL101",
+    line_id: "LHGA1M04",
+    freq: 3,
+    avg_pairs_per_run: 220,
+  },
+  {
+    article: "XL101",
+    line_id: "LHGA1G02",
+    freq: 2,
+    avg_pairs_per_run: 150,
+  },
+  {
+    article: "XL102",
+    line_id: "LHGA2M01",
+    freq: 6,
+    avg_pairs_per_run: 280,
+  },
+  {
+    article: "XL103",
+    line_id: "LHGA2M02",
+    freq: 4,
+    avg_pairs_per_run: 200,
+  },
+  {
+    article: "XL104",
+    line_id: "LHGA3M01",
+    freq: 3,
+    avg_pairs_per_run: 240,
+  },
+  {
+    article: "GC100",
+    line_id: "EXTERNAL-PART-01",
+    freq: 2,
+    avg_pairs_per_run: 500,
+  },
+  {
+    article: "GC101",
+    line_id: "EXTERNAL-PART-02",
+    freq: 1,
+    avg_pairs_per_run: 400,
+  },
+];
+
+/**
  * Initialize mock data into state
  * Call this in GAConfigPage.jsx to populate all states with mock data
  */
@@ -197,5 +270,6 @@ export function initializeMockData() {
     capChoices: MOCK_CAP_CHOICES,
     workingHoursPerDay: MOCK_WORKING_HOURS_PER_DAY,
     importedTargetQty: MOCK_IMPORTED_TARGET_QTY,
+    frequencyData: MOCK_FREQUENCY_DATA,
   };
 }

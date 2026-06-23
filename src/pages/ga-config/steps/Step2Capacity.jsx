@@ -9,6 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   useModelLineFrequency, useLinePool, useGcDepartments,
 } from "../../../hooks/useWizard";
+import { useModelLineFrequencyMock } from "../../../hooks/useWizardMock";
 import { shoeTargetsApi } from "../../../api";
 import { vnNow } from "../../../utils";
 import PriorityMatrixTab from "../components/PriorityMatrixTab";
@@ -434,6 +435,7 @@ export default function Step2Capacity({
   onPrev, onNext,
   onLoadingChange,
   readOnly = false,
+  useMockMode = false,
 }) {
   const [dateRange,  setDateRange]  = useState(getDefaultRange);
   const [activeTab,  setActiveTab]  = useState(
@@ -475,7 +477,11 @@ export default function Step2Capacity({
     return { ...dateRange, articles: allArticles };
   }, [dateRange, allArticles]);
 
-  const { data: freqData, isLoading: freqLoading, refetch: refetchFreq } = useModelLineFrequency(freqParams);
+  const { data: freqData, isLoading: freqLoading, refetch: refetchFreq } = useModelLineFrequencyMock(
+    freqParams,
+    useMockMode,
+    (params) => useModelLineFrequency(params)
+  );
 
   // No-history articles → extended query (6 more months back)
   const freqArticleSet = useMemo(() => new Set((freqData || []).map(m => m.article)), [freqData]);
@@ -492,7 +498,11 @@ export default function Step2Capacity({
     return { date_from: from.toISOString().slice(0, 10), date_to: dateRange.date_to, articles: noHistArticles };
   }, [noHistArticles, dateRange]);
 
-  const { data: extFreqData, isLoading: extFreqLoading, refetch: refetchExt } = useModelLineFrequency(extFreqParams);
+  const { data: extFreqData, isLoading: extFreqLoading, refetch: refetchExt } = useModelLineFrequencyMock(
+    extFreqParams,
+    useMockMode,
+    (params) => useModelLineFrequency(params)
+  );
 
   const isDataLoading = freqLoading || extFreqLoading;
   useEffect(() => {
