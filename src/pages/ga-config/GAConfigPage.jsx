@@ -199,6 +199,24 @@ export default function GAConfigPage() {
     draftCreated.current = true;
     wizardStateApi.createDraft("").then((res) => {
       setDraftRunId(res.id);
+      // Also load default priorities so Step 2 has pre-populated assignments
+      wizardStateApi.getPriorities(res.id).then((p) => {
+        if (p?.priority_config && Object.keys(p.priority_config).length > 0) {
+          setPriorityConfig(p.priority_config);
+        }
+      }).catch(() => {});
+      // Pre-populate Step 3 Material ETAs
+      wizardStateApi.getMaterialEtas(res.id).then((m) => {
+        if (m?.overrides && Object.keys(m.overrides).length > 0) {
+          setMaterialEtaOverrides(m.overrides);
+        }
+      }).catch(() => {});
+      // Pre-populate Step 4 GC dates
+      wizardStateApi.getGcDates(res.id).then((g) => {
+        if (g?.gc_dates && Object.keys(g.gc_dates).length > 0) {
+          setGcDateOverrides(g.gc_dates);
+        }
+      }).catch(() => {});
       setIsLoadedFromServer(true);
     }).catch(() => {
       // Non-fatal: wizard works without persistence if draft creation fails

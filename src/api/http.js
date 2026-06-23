@@ -33,7 +33,7 @@ function route(method, url, body, config) {
   // ── Orders (ERP master) ─────────────────────────────────────────────────────
   if (url === "/orders" && m === "POST") return ok(M.makeOrdersList(body));
   if (url === "/orders/factory-codes") return ok(M.FACTORY_LIST.map((f) => f.code));
-  if (url === "/orders/bulk-lookup") return ok({ items: [] });
+  if (url === "/orders/bulk-lookup") return ok(M.makeBulkLookup(body?.order_ids));
   if (p[0] === "orders" && p.length === 2) {
     const row = M.BAO_CAO_ALL.find((r) => r.RY === p[1]) || M.BAO_CAO_ALL[0];
     return ok(row);
@@ -73,7 +73,25 @@ function route(method, url, body, config) {
 
     // /runs  (list)
     if (p.length === 1) {
-      if (m === "POST") return ok({ id: 101, ...body });
+      if (m === "POST") {
+        const existingIdx = M.RUNS.findIndex((r) => r.id === 101);
+        const newRun = M.makeRun(101, {
+          label: body?.label || `Kế hoạch ${new Date().toLocaleDateString("vi-VN")}`,
+          status: "done",
+          lifecycle_status: "draft",
+          on_time_pct: 90,
+          scheduled_count: 221,
+          n_orders: 25,
+          created_at: new Date().toISOString(),
+          started_at: new Date().toISOString(),
+        });
+        if (existingIdx >= 0) {
+          M.RUNS[existingIdx] = newRun;
+        } else {
+          M.RUNS.unshift(newRun);
+        }
+        return ok(newRun);
+      }
       return ok({ items: M.RUNS, total: M.RUNS.length });
     }
 
@@ -81,7 +99,11 @@ function route(method, url, body, config) {
     const tail = p[2];
 
     if (p.length === 2) {
-      if (m === "DELETE") return ok({ ok: true });
+      if (m === "DELETE") {
+        const idx = M.RUNS.findIndex((r) => r.id === runId);
+        if (idx >= 0) M.RUNS.splice(idx, 1);
+        return ok({ ok: true });
+      }
       // detail
       return ok(M.RUNS.find((r) => r.id === runId) || M.makeRun(runId));
     }
@@ -89,8 +111,27 @@ function route(method, url, body, config) {
     switch (tail) {
       case "status": return ok(M.makeRunStatus(runId));
       case "warnings": return ok(M.makeWarnings(runId));
-      case "accept": return ok({ ok: true, id: runId });
-      case "verify": return ok({ id: 9002, status: "verifying" });
+      case "accept": {
+        const r = M.RUNS.find((x) => x.id === runId);
+        if (r) {
+          r.lifecycle_status = "accepted";
+          r.is_accepted = true;
+          r.accepted_at = new Date().toISOString();
+          r.accepted_by = "tran.minh";
+          r.period_id = body?.period_id || r.period_id;
+        }
+        return ok({ ok: true, id: runId });
+      }
+      case "verify": {
+        const r = M.RUNS.find((x) => x.id === runId);
+        if (r) {
+          r.lifecycle_status = "verifying";
+          setTimeout(() => {
+            r.lifecycle_status = "active";
+          }, 3000);
+        }
+        return ok({ id: 9002, status: "verifying" });
+      }
       case "launch": return ok({ ok: true });
       case "publish-logs": return ok(M.makePublishLogs(runId));
       case "khx-plan":
@@ -101,27 +142,31 @@ function route(method, url, body, config) {
         return ok({ celldata: [] });
       case "output":
         if (p[3] === "orders") return ok(M.makeOutputOrders(runId));
-        if (p[3] === "daily") return ok({ items: [] });
-        if (p[3] === "lineload") return ok({ items: [] });
+        if (p[3] === "daily") return ok(M.makeOutputDaily(runId));
+        if (p[3] === "lineload") return ok(M.makeOutputLineload(runId));
         return ok({ items: [] });
-      case "schedule": return ok({ items: [] });
-      case "genes": return ok({ items: [] });
+      case "schedule":
+        if (p[3] === "daily") return ok(M.makeScheduleDaily(runId, params.target_date));
+        return ok({ items: [] });
+      case "genes": return ok(M.makeRunGenes(runId));
       case "impact": return ok({ items: [] });
       case "diff": return ok({ added: [], removed: [], changed: [] });
       case "snapshot": return ok({ items: [] });
-      case "line-with-running": return ok({ items: [] });
-      case "pdsch-running": return ok({ items: [] });
+      case "line-with-running": return ok(M.makeLineWithRunning(runId, params.line, params.sc_date));
+      case "pdsch-running": return ok({ orders: M.MOCK_PDSCH_RUNNING });
       case "gene-edits": return ok({ items: [] });
       case "chunks":
+        if (p[3] === "user-edits") return ok(M.MOCK_CHUNK_EDITS);
+        if (p[3] === "single-edit" && m === "POST") return ok({ ok: true });
         return ok({ items: [], edits: [] });
       case "wizard": {
         const sub = p[3];
         if (sub === "orders") return ok(M.makeWizardOrders(runId));
-        if (sub === "priorities") return ok({ priority_config: {} });
+        if (sub === "priorities") return ok({ priority_config: M.MOCK_PRIORITY_CONFIG });
         if (sub === "capacities") return ok({ cap_choices: {}, working_hours_per_day: 9 });
         if (sub === "new-model-targets") return ok({ targets: {} });
-        if (sub === "material-etas") return ok({ overrides: {} });
-        if (sub === "gc-dates") return ok({ gc_dates: {} });
+        if (sub === "material-etas") return ok({ overrides: M.MOCK_WIZARD_MATERIAL_ETA_OVERRIDES });
+        if (sub === "gc-dates") return ok({ gc_dates: M.MOCK_WIZARD_GC_DATES });
         return ok({});
       }
       case "wizard-step": return ok({ ok: true });
@@ -137,6 +182,8 @@ function route(method, url, body, config) {
   if (p[0] === "materials") {
     if (p[2] === "import") return ok({ updated: 12, inserted: 4 });
     if (m === "PUT") return ok({ ok: true });
+    // If order_ids param is present, return wizard-specific ETAs
+    if (params.order_ids) return ok({ items: M.MOCK_WIZARD_MATERIAL_ETAS, total: M.MOCK_WIZARD_MATERIAL_ETAS.length });
     return ok({ items: M.MATERIAL_ETAS, total: M.MATERIAL_ETAS.length });
   }
 
@@ -167,8 +214,8 @@ function route(method, url, body, config) {
     if (p[1] === "line-stats") return ok({ items: [] });
     if (p[1] === "line-production") return ok({ items: [] });
     if (p[1] === "line-affinity") return ok({ items: [] });
-    if (p[1] === "model-line-frequency") return ok({ items: [] });
-    if (p[1] === "classify-orders") return ok({ regular: [], gc: [] });
+    if (p[1] === "model-line-frequency") return ok(M.MOCK_MODEL_LINE_FREQUENCY);
+    if (p[1] === "classify-orders") return ok(M.makeClassifyOrders(body));
     return ok({ items: [] });
   }
 

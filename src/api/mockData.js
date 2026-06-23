@@ -40,7 +40,7 @@ export const PERIODS = [
 ];
 
 // ── Runs ──────────────────────────────────────────────────────────────────────
-function makeRun(id, overrides = {}) {
+export function makeRun(id, overrides = {}) {
   const created = addDays(TODAY, -ri(1, 40));
   return {
     id,
@@ -181,6 +181,12 @@ export function makeOrdersList(body = {}) {
   const page = body.page || 1;
   const pageSize = body.page_size || 50;
   let rows = BAO_CAO_ALL;
+
+  // Filter by order_ids when provided (wizard import path)
+  if (body.order_ids?.length) {
+    const idSet = new Set(body.order_ids.map(id => String(id).toUpperCase()));
+    rows = rows.filter((r) => idSet.has(r.RY));
+  }
   if (body.statuses?.includes("N")) rows = rows.filter((r) => r.source === "ga_pending");
   if (body.search) {
     const q = String(body.search).toLowerCase();
@@ -201,6 +207,23 @@ export function makeOrdersList(body = {}) {
     lpd: r.LPD,
     sdd: r.SDD,
     status: r.source === "ga_pending" ? "N" : "P",
+    // Nested order object — needed by Step1Orders table columns
+    order: {
+      ARTICLE:   r.Article,
+      DAOMH_:    r.DAOMH,
+      DAOMH:     r.DAOMH,
+      XieMing_:  r.XieMing,
+      XieMing:   r.XieMing,
+      XTMH_:     r.XTMH,
+      DDMH_:     r.DDMH,
+      COLNO:     r.SPECID,
+      PAIRQTY:   r.QTY,
+      DUEDT:     r.CRD,
+      SPECID:    r.SPECID,
+      CUSTNAME:  r.CUSTNAME,
+      COUNTRY:   r.COUNTRY,
+      LEADTIME:  r.LEADTIME,
+    },
   }));
   return { items, total, page, page_size: pageSize };
 }
@@ -242,7 +265,7 @@ export const FLOORS = [
   { floor_id: 3, name: "Tầng 1 - C" }, { floor_id: 4, name: "Tầng 1 - A" },
 ];
 export const EIP_LINES = LINES.map((l, i) => ({
-  line_id: l, dep_no: `D${100 + i}`, dep_name: `Chuyền ${l}`,
+  line_id: l, dep_no: `D${100 + i}`, dep_name: l,
   line_type: rnd() > 0.3 ? "production" : "lean", floor_id: ri(1, 4), factory_code: l.split("_")[0] + "-F2",
 }));
 export const LINE_POOL = EIP_LINES;
@@ -341,22 +364,402 @@ export function makePublishLogs(runId) {
 // ── Run status (live) ─────────────────────────────────────────────────────────
 export function makeRunStatus(runId) {
   const run = RUNS.find((r) => r.id === runId);
-  if (run?.status === "running") return { current_step: 3, step_name: "TailFollowAllocator", progress_pct: 52 };
-  return { current_step: 6, step_name: "Lưu kết quả", progress_pct: 100 };
+  if (run?.status === "running") {
+    return { status: "running", current_step: 3, step_name: "TailFollowAllocator", progress_pct: 52 };
+  }
+  if (run?.status === "failed") {
+    return { status: "failed", current_step: 0, step_name: "Thất bại", progress_pct: 0 };
+  }
+  return { status: "done", current_step: 6, step_name: "Lưu kết quả", progress_pct: 100 };
 }
 
-// ── Wizard per-run state ──────────────────────────────────────────────────────
+// ── Wizard per-run state (comprehensive mock) ────────────────────────────────
+
+// Fixed set of wizard orders so all steps reference the same IDs consistently.
+const WIZARD_REGULAR_SOURCES = BAO_CAO_ALL.slice(0, 25);
+const WIZARD_GC_SOURCES      = BAO_CAO_ALL.slice(40, 48);
+
+function _wizardOrderItem(r) {
+  return {
+    order_id: r.RY,
+    order: {
+      ARTICLE:   r.Article,
+      DAOMH_:    r.DAOMH,
+      DAOMH:     r.DAOMH,
+      XieMing_:  r.XieMing,
+      XieMing:   r.XieMing,
+      XTMH_:     r.XTMH,
+      DDMH_:     r.DDMH,
+      COLNO:     r.SPECID,
+      PAIRQTY:   r.QTY,
+      DUEDT:     r.CRD,
+      SPECID:    r.SPECID,
+      CUSTNAME:  r.CUSTNAME,
+      COUNTRY:   r.COUNTRY,
+      LEADTIME:  r.LEADTIME,
+    },
+  };
+}
+
 export function makeWizardOrders(runId) {
-  const regular = BAO_CAO_ALL.slice(0, 40).map((r) => ({
-    order_id: r.RY, article: r.Article, model_name: r.XieMing, customer: r.CUSTNAME,
-    qty: r.QTY, crd: r.CRD, factory_code: r.ZLBH.slice(0, 1) + "-F2",
-  }));
-  const gc = BAO_CAO_ALL.slice(40, 52).map((r) => ({
-    order_id: r.RY, article: r.Article, model_name: r.XieMing, customer: r.CUSTNAME,
-    qty: r.QTY, crd: r.CRD, factory_code: r.ZLBH.slice(0, 1) + "-F2",
-  }));
+  const regular = WIZARD_REGULAR_SOURCES.map(_wizardOrderItem);
+  const gc      = WIZARD_GC_SOURCES.map(_wizardOrderItem);
   return { regular, gc };
 }
+
+// Helper: all wizard order IDs (for cross-step references)
+const ALL_WIZARD_IDS = [
+  ...WIZARD_REGULAR_SOURCES.map(r => r.RY),
+  ...WIZARD_GC_SOURCES.map(r => r.RY),
+];
+
+// ── Step 1 — Classify orders ─────────────────────────────────────────────────
+export function makeClassifyOrders(body) {
+  const cls = {};
+  const gcSet = new Set(WIZARD_GC_SOURCES.map(r => r.RY));
+  for (const o of (body?.orders || [])) {
+    const id = String(o.order_id || "").toUpperCase();
+    cls[id] = { type: gcSet.has(id) ? "gc" : "regular" };
+  }
+  return { classifications: cls };
+}
+
+// ── Step 1 — Bulk lookup ─────────────────────────────────────────────────────
+export function makeBulkLookup(orderIds) {
+  const knownSet = new Set(ALL_WIZARD_IDS);
+  const found = (orderIds || []).filter(id => knownSet.has(id));
+  return { found, not_found: (orderIds || []).filter(id => !knownSet.has(id)) };
+}
+
+// ── Step 2 — Model-line frequency ────────────────────────────────────────────
+// 20 articles with history, ~5 "new" articles without history
+export const MOCK_MODEL_LINE_FREQUENCY = (() => {
+  const result = [];
+  // First 20 regular articles get frequency history
+  WIZARD_REGULAR_SOURCES.slice(0, 20).forEach((r, i) => {
+    const fprefix = r.ZLBH.slice(0, 1);
+    const mayLines = LINES.filter(l => l.startsWith(fprefix + "_")).slice(0, 3);
+    const goLines  = LINES.filter(l => l.startsWith(fprefix + "_")).slice(1, 3);
+    result.push({
+      article:     r.Article,
+      cutting_die: r.DAOMH,
+      lines: mayLines.map((lid, li) => ({
+        line_id:   lid,
+        dep_name:  lid,
+        line_type: "may",
+        total_qty: ri(25000, 80000),
+        count:     ri(4, 15),
+        mode_qty:  ri(900, 1600),
+        avg_qty:   ri(800, 1400),
+        floor_id:  ri(1, 4),
+      })),
+      gc_lines: i % 5 === 0 ? [{
+        line_id:   `GC${200 + (i % 6)}`,
+        dep_name:  `Gia công ${(i % 6) + 1}`,
+        line_type: "gc",
+        total_qty: ri(8000, 20000),
+        count:     ri(2, 6),
+        mode_qty:  ri(600, 1000),
+        avg_qty:   ri(500, 900),
+      }] : [],
+    });
+  });
+  // GC orders also get some frequency
+  WIZARD_GC_SOURCES.slice(0, 5).forEach((r, i) => {
+    result.push({
+      article:     r.Article,
+      cutting_die: r.DAOMH,
+      lines: [],
+      gc_lines: [{
+        line_id:   `GC${200 + i}`,
+        dep_name:  `Gia công ${i + 1}`,
+        line_type: "gc",
+        total_qty: ri(10000, 30000),
+        count:     ri(3, 8),
+        mode_qty:  ri(700, 1100),
+        avg_qty:   ri(600, 1000),
+      }],
+    });
+  });
+  return result;
+})();
+
+// ── Step 2 — Pre-populated priority config ───────────────────────────────────
+// Auto-assign lines from frequency data so Step 2 shows realistic assignments.
+export const MOCK_PRIORITY_CONFIG = (() => {
+  const cfg = {};
+  for (const m of MOCK_MODEL_LINE_FREQUENCY) {
+    const key = `${m.article}||${m.cutting_die || ""}`;
+    const mayLines = (m.lines || []).filter(l => l.line_type === "may" || !l.line_type).map(l => l.line_id);
+    const goLines  = (m.lines || []).filter(l => l.line_type === "go").map(l => l.line_id);
+    const gcLines  = (m.gc_lines || []).map(l => l.line_id);
+
+    // For simplicity: all may lines → split primary(first 2) / backup(rest)
+    // If no explicit "go" type, use the last may line as go_primary
+    const mayPrimary = mayLines.slice(0, 2);
+    const mayBackup  = mayLines.slice(2);
+    const goPrimary  = goLines.length > 0 ? goLines.slice(0, 1) : mayLines.slice(-1);
+    const goBackup   = goLines.length > 1 ? goLines.slice(1) : [];
+    const gcPrimary  = gcLines.slice(0, 1);
+    const gcBackup   = gcLines.slice(1);
+
+    cfg[key] = {
+      may_primary: mayPrimary,
+      may_backup:  mayBackup,
+      go_primary:  goPrimary,
+      go_backup:   goBackup,
+      gc_primary:  gcPrimary,
+      gc_backup:   gcBackup,
+    };
+  }
+  return cfg;
+})();
+
+// ── Step 3 — Wizard material ETAs ────────────────────────────────────────────
+export const MOCK_WIZARD_MATERIAL_ETAS = (() => {
+  const rows = [];
+  ALL_WIZARD_IDS.forEach((id, i) => {
+    const r = BAO_CAO_ALL.find(x => x.RY === id) || BAO_CAO_ALL[i];
+    const hasPending = i % 4 === 0; // ~25% orders have pending material
+    rows.push({
+      order_id: id,
+      article:  r.Article,
+      eta_date: hasPending ? isoDate(addDays(TODAY, ri(5, 25))) : null,
+      status:   hasPending ? "pending" : "ok",
+    });
+  });
+  return rows;
+})();
+
+// Pre-populated material ETA overrides for Step 3
+export const MOCK_WIZARD_MATERIAL_ETA_OVERRIDES = (() => {
+  const overrides = {};
+  // For ~25% of regular orders, set a default override date
+  WIZARD_REGULAR_SOURCES.forEach((r, i) => {
+    if (i % 4 === 0) {
+      overrides[r.RY] = isoDate(addDays(TODAY, 3 + (i % 5)));
+    }
+  });
+  return overrides;
+})();
+
+// Pre-populated GC dates for Step 4
+export const MOCK_WIZARD_GC_DATES = (() => {
+  const dates = {};
+  WIZARD_GC_SOURCES.forEach((r, i) => {
+    dates[r.RY] = {
+      start_date: isoDate(addDays(TODAY, 2 + i)),
+      end_date: isoDate(addDays(TODAY, 7 + i)),
+    };
+  });
+  return dates;
+})();
+
+// ── Step 6 — Output daily (calendar & DailyReport) ──────────────────────────
+export function makeOutputDaily(runId) {
+  const rows = [];
+  const sizes = [36, 37, 38, 39, 40, 41, 42, 43, 44];
+  // Use all wizard orders and distribute across days
+  [...WIZARD_REGULAR_SOURCES, ...WIZARD_GC_SOURCES].forEach((r, oi) => {
+    const fprefix = r.ZLBH.slice(0, 1);
+    const possibleLines = LINES.filter(l => l.startsWith(fprefix + "_"));
+    const line = possibleLines[oi % possibleLines.length] || possibleLines[0];
+    const startOffset = ri(5, 30);
+    const nDays = ri(3, 8);
+    const totalQty = r.QTY;
+    const perDay = Math.floor(totalQty / nDays);
+    let remaining = totalQty;
+    for (let d = 0; d < nDays; d++) {
+      const date = addDays(TODAY, startOffset + d);
+      if (date.getDay() === 0) continue; // skip Sunday
+      const qty = d === nDays - 1 ? remaining : perDay;
+      remaining -= qty;
+      if (qty <= 0) continue;
+      // Distribute qty across sizes
+      const sizeMap = {};
+      let sizeRemaining = qty;
+      sizes.forEach((sz, si) => {
+        const szQty = si === sizes.length - 1
+          ? sizeRemaining
+          : Math.floor(qty / sizes.length * (0.5 + rnd()));
+        if (szQty > 0) {
+          sizeMap[String(sz)] = Math.min(szQty, sizeRemaining);
+          sizeRemaining -= sizeMap[String(sz)];
+        }
+      });
+      const isGc = WIZARD_GC_SOURCES.some(x => x.RY === r.RY);
+      rows.push({
+        scbh:  r.RY,
+        date:  isoDate(date),
+        line:  isGc ? `GC${200 + (oi % 6)}` : line,
+        qty,
+        sizes: sizeMap,
+        stage: isGc ? "gc" : (d < nDays / 2 ? "sew" : "go"),
+      });
+    }
+  });
+  return { rows };
+}
+
+// ── Step 6 — Output lineload (aggregate daily report) ────────────────────────
+export function makeOutputLineload(runId) {
+  const daily = makeOutputDaily(runId).rows;
+  const groups = {};
+  for (const r of daily) {
+    const key = `${r.date}||${r.line}`;
+    if (!groups[key]) {
+      groups[key] = {
+        date: r.date,
+        line: r.line,
+        dep_name: r.line,
+        total_qty: 0,
+        day_capacity: ri(1000, 2000), // realistic daily capacity
+        stage: r.stage,
+      };
+    }
+    groups[key].total_qty += r.qty;
+  }
+  return { items: Object.values(groups), rows: Object.values(groups), total: Object.values(groups).length };
+}
+
+// ── Step 6 — Run Genes (lineup tab details) ──────────────────────────────────
+export function makeRunGenes(runId) {
+  // Use BAO_CAO_ALL to build detailed gene mappings for orders
+  const items = Array.from({ length: 120 }, (_, i) => {
+    const r = BAO_CAO_ALL[i];
+    const isGc = WIZARD_GC_SOURCES.some(x => x.RY === r.RY);
+    const fprefix = r.ZLBH.slice(0, 1);
+    
+    // Pick a line from LINES
+    const possibleLines = LINES.filter(l => l.startsWith(fprefix + "_"));
+    const line = possibleLines[i % possibleLines.length] || possibleLines[0];
+    
+    return {
+      order_id: r.RY,
+      cutting_die: r.DAOMH,
+      tool: r.XTMH,
+      last: r.DDMH,
+      style: r.XieMing,
+      article: r.Article,
+      dep_name_may: isGc ? `GC${200 + (i % 6)}` : `${line}_M`,
+      dep_name_go: isGc ? null : `${line}_G`,
+      line_may: isGc ? `GC${200 + (i % 6)}` : `${line}_M`,
+      line_go: isGc ? null : `${line}_G`,
+    };
+  });
+  return { items, genes: items, total: items.length };
+}
+
+// ── Step 6 — Schedule daily (detailed drilldown by day/line) ──────────────────
+export function makeScheduleDaily(runId, targetDate) {
+  const daily = makeOutputDaily(runId).rows;
+  const filtered = targetDate ? daily.filter(r => r.date === targetDate) : daily;
+  
+  // Group by line
+  const linesMap = {};
+  for (const r of filtered) {
+    const o = BAO_CAO_ALL.find(x => x.RY === r.scbh) || {};
+    if (!linesMap[r.line]) {
+      linesMap[r.line] = {
+        line: r.line,
+        sew_orders: [],
+        go_orders: [],
+      };
+    }
+    const orderItem = {
+      order_id: r.scbh,
+      article: o.Article || "",
+      qty: r.qty,
+      stage: r.stage === "sew" ? "SEW" : r.stage === "go" ? "GO" : r.stage,
+      crd: o.CRD || "",
+      is_frozen: o.source === "in_production",
+      state: o.source === "in_production" ? "IN_PROGRESS" : "NEW",
+      sizes: r.sizes || {},
+    };
+    if (r.stage === "sew") {
+      linesMap[r.line].sew_orders.push(orderItem);
+    } else {
+      linesMap[r.line].go_orders.push(orderItem);
+    }
+  }
+  return { lines: Object.values(linesMap) };
+}
+
+// ── Step 6 — Line with running orders (ERP current actuals) ───────────────────
+export function makeLineWithRunning(runId, line, scDate) {
+  const running = [];
+  const committed = [];
+  
+  const linePrefix = line ? line.split("_")[0] : "B";
+  const matching = BAO_CAO_ALL.filter(x => x.ZLBH.startsWith(linePrefix)).slice(0, 4);
+  
+  matching.forEach((r, i) => {
+    const qty = r.QTY;
+    const act = Math.round(qty * (0.3 + 0.1 * i));
+    const rem = qty - act;
+    if (i % 2 === 0) {
+      running.push({
+        scbh: r.RY,
+        actual_qty: act,
+        order_qty: qty,
+        remaining_qty: rem,
+      });
+    } else {
+      committed.push({
+        scbh: r.RY,
+        article: r.Article,
+        actual_sew_qty: act,
+        remaining_sew_qty: rem,
+        order_qty: qty,
+        lpd: r.LPD,
+      });
+    }
+  });
+  return { running_orders: running, committed_orders: committed };
+}
+
+// ── Step 6 — PDSCH Running (existing scheduled orders) ───────────────────────
+export const MOCK_PDSCH_RUNNING = (() => {
+  const orders = [];
+  BAO_CAO_ALL.slice(100, 110).forEach((r, i) => {
+    const fprefix = r.ZLBH.slice(0, 1);
+    const line = LINES.filter(l => l.startsWith(fprefix + "_"))[i % 3] || "B_L01";
+    orders.push({
+      order_id: r.RY,
+      scbh: r.RY,
+      article: r.Article,
+      style: r.XieMing,
+      cutting_die: r.DAOMH,
+      line_may: `${line}_M`,
+      line_go: `${line}_G`,
+      qty: r.QTY,
+      actual_qty_sew: Math.round(r.QTY * 0.4),
+      actual_qty_go: Math.round(r.QTY * 0.2),
+      source: "production",
+      psdt: r.PSDT,
+      pedt: r.PEDT,
+      crd: r.CRD,
+      lpd: r.LPD,
+    });
+  });
+  return orders;
+})();
+
+// ── Step 6 — Chunk edit history ──────────────────────────────────────────────
+export const MOCK_CHUNK_EDITS = [
+  { id: 1, order_id: WIZARD_REGULAR_SOURCES[0]?.RY || "RY20261", action: "move",
+    old_line: "B_L01", new_line: "B_L02", old_date: "2026-07-10", new_date: "2026-07-11",
+    old_qty: 1200, new_qty: 1200, edited_at: addDays(TODAY, -1).toISOString(), edited_by: "tran.minh" },
+  { id: 2, order_id: WIZARD_REGULAR_SOURCES[3]?.RY || "RY20264", action: "qty_change",
+    old_line: "B_L03", new_line: "B_L03", old_date: "2026-07-12", new_date: "2026-07-12",
+    old_qty: 1500, new_qty: 1800, edited_at: addDays(TODAY, -1).toISOString(), edited_by: "le.an" },
+  { id: 3, order_id: WIZARD_REGULAR_SOURCES[7]?.RY || "RY20268", action: "delete",
+    old_line: "C_L02", new_line: null, old_date: "2026-07-15", new_date: null,
+    old_qty: 900, new_qty: null, edited_at: addDays(TODAY, 0).toISOString(), edited_by: "tran.minh" },
+  { id: 4, order_id: WIZARD_GC_SOURCES[0]?.RY || "RY20281", action: "add",
+    old_line: null, new_line: "GC200", old_date: null, new_date: "2026-07-18",
+    old_qty: null, new_qty: 2000, edited_at: addDays(TODAY, 0).toISOString(), edited_by: "tran.minh" },
+];
 
 // ── KHX Plan sheets ──────────────────────────────────────────────────────────
 export function makeKhxPlanSheets(runId) {

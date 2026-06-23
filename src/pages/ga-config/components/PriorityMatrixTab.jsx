@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, useEffect, useRef, memo, useCallback } from "react";
+import { useState, useMemo, useEffect, useRef, memo, useCallback } from "react";
 import {
   X, Search, Filter, Loader2, Info, RefreshCw, List,
 } from "lucide-react";
@@ -348,7 +348,7 @@ function AddLineMenu({ pos, modelKeyStr, configKey, currentLines, allMayLines, a
   const isMay  = configKey.startsWith("may");
   const isPrimary = configKey.includes("primary");
   const allCandidates = isGc ? allGcLines : isMay ? allMayLines : allGoLines;
-  const typeLabel = isGc ? "Gia công" : isMay ? "May" : "Gò";
+  const typeLabel = isGc ? "Gia công" : isMay ? "M" : "G";
   const hoverCls = isGc ? "hover:bg-orange-50" : isMay ? "hover:bg-blue-50" : "hover:bg-green-50";
 
   useEffect(() => {
@@ -414,7 +414,7 @@ function AddLineMenu({ pos, modelKeyStr, configKey, currentLines, allMayLines, a
   return (
     <div ref={ref} className="fixed z-50 w-64 bg-white rounded-xl border border-gray-200 shadow-xl p-2" style={{ top, left }}>
       <div className="text-xs font-medium text-gray-500 px-1 mb-1.5">
-        Thêm chuyền{" "}
+        Thêm{" "}
         <span className={isGc ? "text-orange-600 font-semibold" : isMay ? "text-blue-600 font-semibold" : "text-green-600 font-semibold"}>
           {typeLabel}
         </span>{" "}
@@ -422,10 +422,10 @@ function AddLineMenu({ pos, modelKeyStr, configKey, currentLines, allMayLines, a
       </div>
       <input autoFocus
         className="w-full px-2 py-1 text-xs border border-gray-200 rounded mb-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
-        placeholder="Tìm chuyền, nhà, alias…"
+        placeholder="Tìm kiếm..."
         value={q} onChange={e => setQ(e.target.value)} />
       <div className="max-h-72 overflow-auto">
-        {total === 0 && <div className="text-xs text-gray-400 px-2 py-2">Không có chuyền {typeLabel} khớp</div>}
+        {total === 0 && <div className="text-xs text-gray-400 px-2 py-2">Không có {typeLabel} khớp</div>}
         {withFreq.length > 0 && (
           <>
             <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1 py-0.5">Từng làm mã này</div>
@@ -664,14 +664,14 @@ function PriorityMatrixTab({
     ? [
         { configKey: "gc_primary", label: "GC chính",  color: "text-orange-700", bg: "bg-orange-50" },
         { configKey: "gc_backup",  label: "GC phụ",    color: "text-orange-500", bg: ""             },
-        { configKey: "go_primary", label: "Gò chính",  color: "text-green-700",  bg: "bg-green-50"  },
-        { configKey: "go_backup",  label: "Gò phụ",    color: "text-green-500",  bg: ""             },
+        { configKey: "go_primary", label: "G chính",   color: "text-green-700",  bg: "bg-green-50"  },
+        { configKey: "go_backup",  label: "G phụ",     color: "text-green-500",  bg: ""             },
       ]
     : [
-        { configKey: "may_primary", label: "May chính", color: "text-blue-700",  bg: "bg-blue-50"  },
-        { configKey: "go_primary",  label: "Gò chính",  color: "text-green-700", bg: "bg-green-50" },
-        { configKey: "may_backup",  label: "May phụ",   color: "text-blue-500",  bg: ""            },
-        { configKey: "go_backup",   label: "Gò phụ",    color: "text-green-500", bg: ""            },
+        { configKey: "may_primary", label: "M chính", color: "text-blue-700",  bg: "bg-blue-50"  },
+        { configKey: "go_primary",  label: "G chính",  color: "text-green-700", bg: "bg-green-50" },
+        { configKey: "may_backup",  label: "M phụ",   color: "text-blue-500",  bg: ""            },
+        { configKey: "go_backup",   label: "G phụ",    color: "text-green-500", bg: ""            },
       ];
 
   const getAssign = (key) => {
