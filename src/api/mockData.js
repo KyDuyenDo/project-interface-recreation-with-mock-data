@@ -326,6 +326,75 @@ export const MATERIAL_TRACKING = _TRACKING_RUNS.flatMap((rc, ri_) =>
   })
 );
 
+// ── GC (Gia công) Tracking ───────────────────────────────────────────────────
+const _GC_TRACKING_RUNS = [
+  { run_id: 48, run_label: "run_20260622_active", period_id: 2, period_label: "Tháng 6/2026", lifecycle_status: "active" },
+  { run_id: 47, run_label: "run_20260622_verify", period_id: 2, period_label: "Tháng 6/2026", lifecycle_status: "accepted" },
+  { run_id: 46, run_label: "run_20260621_a3",     period_id: 2, period_label: "Tháng 6/2026", lifecycle_status: "draft" },
+  { run_id: 41, run_label: "run_20260610_draft",  period_id: 1, period_label: "Tháng 5/2026", lifecycle_status: "draft" },
+];
+const _GC_UNITS = [
+  { dep_no: "GC200", name: "Gia công Thuận Phát" },
+  { dep_no: "GC201", name: "Gia công Minh Khoa" },
+  { dep_no: "GC202", name: "Gia công Đức Hùng" },
+  { dep_no: "GC203", name: "Gia công Thiên Long" },
+  { dep_no: "GC204", name: "Gia công Bảo Châu" },
+  { dep_no: "GC205", name: "Gia công Kim Anh" },
+];
+// Return-confirmed offsets from TODAY (days): <0 = past (late), >0 = future
+// Pattern per i%5: 0→received(-10), 1→late(-2), 2→warning(+3), 3→on_track(+12), 4→on_track(+22)
+const _RC_OFFSETS = [-10, -2, 3, 12, 22];
+
+export const GC_TRACKING = _GC_TRACKING_RUNS.flatMap((rc, ri_) =>
+  Array.from({ length: 10 }, (_, i) => {
+    const r = BAO_CAO_ALL[(ri_ * 53 + i * 17) % BAO_CAO_ALL.length];
+    const fprefix = r.ZLBH.slice(0, 1);
+    const lineArr = _LINES_BY_PREFIX[fprefix] || _LINES_BY_PREFIX.B;
+    const line_id = lineArr[i % lineArr.length];
+
+    const statusIdx = i % 5;
+    const rcDate = addDays(TODAY, _RC_OFFSETS[statusIdx]);
+    const deadline = isoDate(addDays(rcDate, 8 + (i % 3) * 3));
+    const sent_date = isoDate(addDays(TODAY, -(15 + (i % 7) * 2)));
+    const return_confirmed_date = isoDate(rcDate);
+    const gcUnit = _GC_UNITS[(ri_ * 2 + i) % _GC_UNITS.length];
+    const extension_count = (statusIdx === 3 && i > 5) ? 1 : 0;
+    const extended_deadline = extension_count > 0 ? isoDate(addDays(rcDate, 5)) : null;
+
+    let status, actual_return_date = null;
+    if (statusIdx === 0)      { status = "received"; actual_return_date = isoDate(addDays(TODAY, -3)); }
+    else if (statusIdx === 1) { status = "late"; }
+    else if (statusIdx === 2) { status = "warning"; }
+    else                      { status = "on_track"; }
+
+    return {
+      id: ri_ * 10 + i + 1,
+      order_id: r.RY,
+      article: r.Article,
+      shoe_type: r.XieMing,
+      qty: r.QTY,
+      gc_dep_no: gcUnit.dep_no,
+      gc_unit: gcUnit.name,
+      line_id,
+      deadline,
+      sent_date,
+      return_confirmed_date,
+      extended_deadline,
+      actual_return_date,
+      extension_count,
+      status,
+      run_id: rc.run_id,
+      run_label: rc.run_label,
+      period_id: rc.period_id,
+      period_label: rc.period_label,
+      lifecycle_status: rc.lifecycle_status,
+      notes: [],
+      updated_at: null,
+      updated_by: null,
+    };
+  })
+);
+
 // ── Shoe model targets (Mục tiêu dạng giày) ──────────────────────────────────
 export let SHOE_TARGETS = MODELS.map((m, i) => ({
   id: i + 1,

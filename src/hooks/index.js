@@ -14,3 +14,4 @@ export * from "./useBaoCao";
 export * from "./useWizard";
 export * from "./useKHXPlan";
 export * from "./usePermissions";
+export * from "./useGCTracking";

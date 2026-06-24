@@ -576,6 +576,47 @@ function route(method, url, body, config) {
   // ── Subcontractors ───────────────────────────────────────────────────────────
   if (p[0] === "subcontractors") return ok({ items: [] });
 
+  // ── GC Tracking ──────────────────────────────────────────────────────────────
+  if (p[0] === "gc" && p[1] === "tracking") {
+    if (m === "PATCH" && p[2]) {
+      const id = parseInt(p[2]);
+      const item = M.GC_TRACKING.find((t) => t.id === id);
+      if (item) {
+        if (body?.return_confirmed_date) item.return_confirmed_date = body.return_confirmed_date;
+        if (body?.actual_return_date) {
+          item.actual_return_date = body.actual_return_date;
+          item.status = "received";
+        }
+        if (body?.extend) {
+          item.extension_count = (item.extension_count || 0) + 1;
+          if (body.return_confirmed_date) item.return_confirmed_date = body.return_confirmed_date;
+          const rcMs = new Date(item.return_confirmed_date + "T00:00:00Z");
+          const todayMs = new Date("2026-06-23T00:00:00Z");
+          const daysToRc = (rcMs - todayMs) / 86400000;
+          item.status = daysToRc < 0 ? "late" : daysToRc <= 5 ? "warning" : "on_track";
+        }
+        if (body?.note) {
+          item.notes = [...(item.notes || []), { text: body.note, by: body.updated_by, at: new Date().toISOString() }];
+        }
+        item.updated_at = new Date().toISOString();
+        item.updated_by = body?.updated_by || null;
+      }
+      return ok({ ok: true, item });
+    }
+    let items = [...M.GC_TRACKING];
+    if (params.status) items = items.filter((t) => t.status === params.status);
+    if (params.run_id) items = items.filter((t) => t.run_id === parseInt(params.run_id));
+    if (params.line_ids) {
+      const lineSet = new Set(params.line_ids.split(","));
+      items = items.filter((t) => lineSet.has(t.line_id));
+    }
+    if (params.sort === "return_asc") items.sort((a, b) => a.return_confirmed_date.localeCompare(b.return_confirmed_date));
+    else if (params.sort === "return_desc") items.sort((a, b) => b.return_confirmed_date.localeCompare(a.return_confirmed_date));
+    else if (params.sort === "deadline_asc") items.sort((a, b) => a.deadline.localeCompare(b.deadline));
+    else if (params.sort === "deadline_desc") items.sort((a, b) => b.deadline.localeCompare(a.deadline));
+    return ok({ items, total: items.length });
+  }
+
   // ── Material Tracking ────────────────────────────────────────────────────────
   if (p[0] === "material" && p[1] === "tracking") {
     if (m === "PATCH" && p[2]) {

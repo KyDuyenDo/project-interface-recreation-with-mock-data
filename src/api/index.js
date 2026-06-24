@@ -208,6 +208,12 @@ export const wizardApi = {
 
 };
 
+
+// GC Tracking
+export const gcTrackingApi = {
+  list: (params) => http.get("/gc/tracking", { params }).then((r) => r.data),
+  patch: (id, body) => http.patch(`/gc/tracking/${id}`, body).then((r) => r.data),
+};
 // ─── Schedule Periods ────────────────────────────────────────────────────────
 export const periodsApi = {
   list: (params) => http.get("/periods", { params }).then((r) => r.data),
