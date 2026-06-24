@@ -354,9 +354,7 @@ export default function SubPlannerDispatchPanel({ runId, dispatchStep, readOnly 
     },
   });
 
-  if (!runId) return null;
-
-  // Build planner list
+  // Build planner list (before any early returns — hooks must not be conditional)
   let planners = [];
   if (dispatched && statusData?.planners) {
     planners = statusData.planners.map(p => ({
@@ -364,7 +362,6 @@ export default function SubPlannerDispatchPanel({ runId, dispatchStep, readOnly 
       orders: mockOrders(p.username, p.lines || [], true),
     }));
   } else {
-    // Pre-dispatch: build from line assignments
     const items = Array.isArray(assignData) ? assignData : (assignData?.items || []);
     const byPlanner = {};
     for (const a of items) {
@@ -376,19 +373,21 @@ export default function SubPlannerDispatchPanel({ runId, dispatchStep, readOnly 
     planners = Object.values(byPlanner);
   }
 
+  // Auto-select first planner (must be before any early return)
+  useEffect(() => {
+    if (planners.length > 0 && !selectedPlanner) {
+      setSelectedPlanner(planners[0].username);
+    }
+  }, [planners.length]); // eslint-disable-line
+
+  if (!runId) return null;
+
   const confirmedCount = planners.filter(p => p.status === "confirmed").length;
   const rejectedCount  = planners.filter(p => p.status === "rejected").length;
   const total          = planners.length;
   const allConfirmed   = total > 0 && confirmedCount === total;
 
   const selectedPlannerData = selectedPlanner ? planners.find(p => p.username === selectedPlanner) || null : null;
-
-  // Auto-select first planner
-  useEffect(() => {
-    if (planners.length > 0 && !selectedPlanner) {
-      setSelectedPlanner(planners[0].username);
-    }
-  }, [planners.length]);
 
   const btnColor = {
     2: "bg-blue-600 hover:bg-blue-700",

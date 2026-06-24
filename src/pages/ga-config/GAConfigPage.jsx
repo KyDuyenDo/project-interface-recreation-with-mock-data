@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, X, Check, Lock, Eye, Loader2, Settings2, Users, CheckCircle2, AlertTriangle } from "lucide-react";
+import { ArrowLeft, X, Check, Lock, Eye, Loader2, Users, CheckCircle2, AlertTriangle, ChevronRight, PanelRightOpen } from "lucide-react";
 import { useRunStatus, useRunDetail } from "../../hooks/useRuns";
 import { wizardStateApi, runsApi } from "../../api";
 import { usePermissions } from "../../hooks/usePermissions";
@@ -31,7 +31,7 @@ const STEPS = [
 
 // ─── Step indicator ───────────────────────────────────────────────────────────
 
-function WizardStepper({ step, completedUpTo, canNavigateTo, runStatus, gaHasRun, onGoStep }) {
+function WizardStepper({ step, completedUpTo, canNavigateTo, runStatus, gaHasRun, onGoStep, rightSlot }) {
   // "locked" = truly inaccessible (GA running, or prerequisite not met)
   // "readOnly" = accessible but content is view-only (GA completed, steps 0-3)
   const isReadOnly = (i) => gaHasRun && i < 4;
@@ -41,7 +41,7 @@ function WizardStepper({ step, completedUpTo, canNavigateTo, runStatus, gaHasRun
   };
 
   return (
-    <div className="flex border-b border-gray-200 bg-white shrink-0 overflow-x-auto">
+    <div className="flex border-b border-gray-200 bg-white shrink-0 overflow-x-auto items-center">
       {STEPS.map((s, i) => {
         const isCompleted = i <= completedUpTo;
         const isCurrent   = i === step;
@@ -84,98 +84,103 @@ function WizardStepper({ step, completedUpTo, canNavigateTo, runStatus, gaHasRun
           </button>
         );
       })}
+      {rightSlot && (
+        <div className="ml-auto px-3 shrink-0">{rightSlot}</div>
+      )}
     </div>
   );
 }
 
-// ─── Dispatch sub-tab bar ─────────────────────────────────────────────────────
-// Shown below WizardStepper for steps that support sub-planner dispatch.
-
-function DispatchSubTabBar({ dispatchStep, runId, subTab, onTabChange }) {
-  const STEP_LABEL = { 2: "Ưu tiên chuyền", 3: "NVL về", 4: "Ngày GC", 6: "Review lịch" };
-  const TAB_COLOR  = { 2: "blue", 3: "teal", 4: "orange", 6: "purple" };
+// ─── Sub-Planner drawer trigger (badge shown in WizardStepper right slot) ─────
+function SubPlannerTriggerBadge({ dispatchStep, runId, onClick }) {
+  const TAB_COLOR = { 2: "blue", 3: "teal", 4: "orange", 6: "purple" };
   const color = TAB_COLOR[dispatchStep] || "blue";
 
-  const activeConfig = {
-    blue:   "border-blue-600   text-blue-700   bg-blue-50/60",
-    teal:   "border-teal-600   text-teal-700   bg-teal-50/60",
-    orange: "border-orange-500 text-orange-700 bg-orange-50/60",
-    purple: "border-purple-600 text-purple-700 bg-purple-50/60",
-  }[color];
-
-  const badgeColor = {
-    blue:   "bg-blue-100   text-blue-700",
-    teal:   "bg-teal-100   text-teal-700",
-    orange: "bg-orange-100 text-orange-700",
-    purple: "bg-purple-100 text-purple-700",
-  }[color];
-
-  // Fetch dispatch status to show badge
   const { data: statusData } = useQuery({
-    queryKey:  ["dispatch-status", runId, dispatchStep],
-    queryFn:   () => http.get(`/runs/${runId}/dispatch-status`, { params: { step: dispatchStep } }).then(r => r.data),
-    enabled:   !!runId,
+    queryKey:        ["dispatch-status", runId, dispatchStep],
+    queryFn:         () => http.get(`/runs/${runId}/dispatch-status`, { params: { step: dispatchStep } }).then(r => r.data),
+    enabled:         !!runId,
     refetchInterval: 10000,
   });
 
-  const dispatched      = statusData?.dispatched;
-  const planners        = statusData?.planners || [];
-  const confirmedCount  = planners.filter(p => p.status === "confirmed").length;
-  const rejectedCount   = planners.filter(p => p.status === "rejected").length;
-  const total           = planners.length;
-  const allConfirmed    = total > 0 && confirmedCount === total;
+  const dispatched     = statusData?.dispatched;
+  const planners       = statusData?.planners || [];
+  const confirmedCount = planners.filter(p => p.status === "confirmed").length;
+  const rejectedCount  = planners.filter(p => p.status === "rejected").length;
+  const total          = planners.length;
+  const allConfirmed   = total > 0 && confirmedCount === total;
+
+  const btnBase = "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors";
+  const btnStyle = allConfirmed
+    ? `${btnBase} bg-green-50 border-green-200 text-green-700 hover:bg-green-100`
+    : rejectedCount > 0
+      ? `${btnBase} bg-red-50 border-red-200 text-red-700 hover:bg-red-100`
+      : dispatched
+        ? `${btnBase} bg-${color}-50 border-${color}-200 text-${color}-700 hover:bg-${color}-100`
+        : `${btnBase} bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100`;
 
   return (
-    <div className="flex items-center border-b border-gray-200 bg-white shrink-0 px-5 gap-0">
-      {/* Config tab */}
-      <button
-        onClick={() => onTabChange("config")}
-        className={[
-          "flex items-center gap-1.5 px-4 py-2.5 border-b-2 text-sm font-medium transition-colors",
-          subTab === "config"
-            ? activeConfig
-            : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50",
-        ].join(" ")}
-      >
-        <Settings2 size={13} />
-        {STEP_LABEL[dispatchStep] || "Cấu hình"}
-      </button>
-
-      {/* Tracking tab */}
-      <button
-        onClick={() => onTabChange("tracking")}
-        className={[
-          "flex items-center gap-1.5 px-4 py-2.5 border-b-2 text-sm font-medium transition-colors",
-          subTab === "tracking"
-            ? activeConfig
-            : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50",
-        ].join(" ")}
-      >
-        <Users size={13} />
-        Theo dõi Sub-Planner
-        {/* Status badge */}
-        {dispatched && (
-          allConfirmed ? (
-            <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700 ml-0.5">
-              <CheckCircle2 size={9} /> {total}/{total}
-            </span>
-          ) : rejectedCount > 0 ? (
-            <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700 ml-0.5">
-              <AlertTriangle size={9} /> {rejectedCount} từ chối
-            </span>
-          ) : (
-            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-0.5 ${badgeColor}`}>
-              {confirmedCount}/{total}
-            </span>
-          )
-        )}
-        {!dispatched && (
-          <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-400 ml-0.5">
-            Chưa phân công
+    <button onClick={onClick} className={btnStyle}>
+      <Users size={12} />
+      Sub-Planner
+      {dispatched ? (
+        allConfirmed ? (
+          <span className="flex items-center gap-0.5 bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
+            <CheckCircle2 size={9} /> {total}/{total}
           </span>
-        )}
-      </button>
-    </div>
+        ) : rejectedCount > 0 ? (
+          <span className="flex items-center gap-0.5 bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
+            <AlertTriangle size={9} /> {rejectedCount}
+          </span>
+        ) : (
+          <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
+            {confirmedCount}/{total}
+          </span>
+        )
+      ) : (
+        <span className="bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full text-[10px]">Chưa gửi</span>
+      )}
+      <PanelRightOpen size={12} className="opacity-50" />
+    </button>
+  );
+}
+
+// ─── Sub-Planner right drawer ─────────────────────────────────────────────────
+function SubPlannerDrawer({ open, onClose, dispatchStep, runId }) {
+  if (!dispatchStep) return null;
+  return (
+    <>
+      {/* Backdrop */}
+      {open && (
+        <div
+          className="fixed inset-0 z-30 bg-black/20 backdrop-blur-[1px] transition-opacity"
+          onClick={onClose}
+        />
+      )}
+      {/* Drawer panel */}
+      <div className={`fixed top-0 right-0 h-full z-40 flex flex-col bg-white shadow-2xl border-l border-gray-200 transition-transform duration-300 ease-in-out ${open ? "translate-x-0" : "translate-x-full"}`}
+        style={{ width: "min(780px, 90vw)" }}>
+        {/* Drawer header */}
+        <div className="flex items-center gap-3 px-5 py-3.5 border-b bg-gray-50 shrink-0">
+          <Users size={15} className="text-gray-500" />
+          <span className="text-sm font-semibold text-gray-800 flex-1">Theo dõi Sub-Planner</span>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-gray-200 transition-colors text-gray-500"
+          >
+            <X size={15} />
+          </button>
+        </div>
+        {/* Drawer body */}
+        <div className="flex-1 overflow-hidden flex flex-col">
+          <SubPlannerDispatchPanel
+            runId={runId}
+            dispatchStep={dispatchStep}
+            readOnly={false}
+          />
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -213,12 +218,12 @@ export default function GAConfigPage() {
   const [isLoadedFromServer, setIsLoadedFromServer] = useState(false);
   const [step2Loading,       setStep2Loading]       = useState(false);
 
-  // Sub-tab for dispatch-capable steps (1=Ưu tiên, 2=NVL, 3=GC, 5=Review)
-  const DISPATCH_STEPS = { 1: 2, 2: 3, 3: 4, 5: 6 }; // wizard index → dispatch step number
-  const [subTab, setSubTab] = useState("config"); // "config" | "tracking"
+  // Dispatch-capable steps: wizard index → dispatch step number
+  const DISPATCH_STEPS = { 1: 2, 2: 3, 3: 4, 5: 6 };
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
-  // Reset sub-tab when wizard step changes
-  useEffect(() => { setSubTab("config"); }, [step]);
+  // Close drawer when wizard step changes
+  useEffect(() => { setDrawerOpen(false); }, [step]);
 
   // Sync step → URL so each step has its own URL (browser history, refresh-safe)
   useEffect(() => {
@@ -534,7 +539,7 @@ export default function GAConfigPage() {
         </div>
       )}
 
-      {/* Step indicator */}
+      {/* Step indicator + Sub-Planner trigger button */}
       <WizardStepper
         step={step}
         completedUpTo={completedUpTo}
@@ -542,36 +547,28 @@ export default function GAConfigPage() {
         runStatus={runStatus}
         gaHasRun={gaHasRun}
         onGoStep={goStep}
+        rightSlot={DISPATCH_STEPS[step] && !isSub ? (
+          <SubPlannerTriggerBadge
+            dispatchStep={DISPATCH_STEPS[step]}
+            runId={step === 5 ? runId : draftRunId}
+            onClick={() => setDrawerOpen(true)}
+          />
+        ) : null}
       />
 
-      {/* Dispatch sub-tab bar — only for steps that support sub-planner dispatch */}
+      {/* Sub-Planner slide-in drawer */}
       {DISPATCH_STEPS[step] && !isSub && (
-        <DispatchSubTabBar
+        <SubPlannerDrawer
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
           dispatchStep={DISPATCH_STEPS[step]}
           runId={step === 5 ? runId : draftRunId}
-          subTab={subTab}
-          onTabChange={setSubTab}
         />
       )}
 
-      {/* Step content */}
+      {/* Step content — always visible */}
       <div className="flex-1 min-h-0 relative bg-gray-50">
         <div className="absolute inset-0 p-5 overflow-hidden flex flex-col">
-
-        {/* ── Tracking sub-tab — replaces step content ── */}
-        {DISPATCH_STEPS[step] && subTab === "tracking" && !isSub && (
-          <div className="flex-1 overflow-y-auto">
-            <SubPlannerDispatchPanel
-              runId={step === 5 ? runId : draftRunId}
-              dispatchStep={DISPATCH_STEPS[step]}
-              readOnly={false}
-              onDispatch={() => {}}
-            />
-          </div>
-        )}
-
-        {/* ── Config tab (or non-dispatch steps) ── */}
-        {(subTab === "config" || !DISPATCH_STEPS[step] || isSub) && (
           <>
           {step === 0 && (
             <Step1Orders
@@ -647,7 +644,6 @@ export default function GAConfigPage() {
             <Step7Confirm runId={runId} draftRunId={draftRunId} label={label} onPrev={handlePrev} />
           )}
           </>
-        )}
 
         </div>
       </div>
