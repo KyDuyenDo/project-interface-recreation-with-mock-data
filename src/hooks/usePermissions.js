@@ -17,7 +17,7 @@ export function usePermissions() {
     canSeeOrders: isMain,
     canSeeKHX: isMain,
     canSeeLapLich: true,
-    canSeeMyTasks: isSub,
+    canSeeMyTasks: false, // integrated into Lập lịch for sub-planner
     canSeeLineAssignment: isMain,
     canSeeEvents: isMain,
     canSeeSubcontractor: isMain,

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { ChevronLeft, ChevronRight, Info, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Info, Loader2, CheckCircle2, AlertTriangle, Eye, Layers } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRunDetail, useRunOutputOrders, useRunOutputDaily } from "../../../hooks/useRuns";
 import { wizardStateApi } from "../../../api";
@@ -122,11 +122,12 @@ const ACTION_LABELS = {
   qty_change: "Sửa số lượng",
 };
 
-export default function Step6Edit({ runId, capacityOverrides, onPrev, onNext, dispatchBlocked = false }) {
-  const [tab,          setTab]          = useState("overview");
-  const [localChunks,  setLocalChunks]  = useState(null);
-  const [edits,        setEdits]        = useState({});
-  const [showTracking, setShowTracking] = useState(false);
+export default function Step6Edit({ runId, capacityOverrides, onPrev, onNext, dispatchBlocked = false, lineFilter = null, viewOnly = false }) {
+  const [tab,           setTab]          = useState("overview");
+  const [localChunks,   setLocalChunks]  = useState(null);
+  const [edits,         setEdits]        = useState({});
+  const [showTracking,  setShowTracking] = useState(false);
+  const [showAllLines,  setShowAllLines] = useState(false);
   const queryClient = useQueryClient();
 
   // ── Auto-save indicator ───────────────────────────────────────────────────
@@ -161,7 +162,7 @@ export default function Step6Edit({ runId, capacityOverrides, onPrev, onNext, di
   const { data: dailyData,  isLoading: dailyLoading  } = useRunOutputDaily(runId);
 
   // Normalize: scbh → order_id, assign color
-  const orders = useMemo(() => {
+  const allOrders = useMemo(() => {
     const raw = ordersData?.orders ?? ordersData?.items ?? [];
     return raw.map(o => ({
       ...o,
@@ -176,15 +177,28 @@ export default function Step6Edit({ runId, capacityOverrides, onPrev, onNext, di
   // Fall back to evenly-distributed frontend computation when not yet stored.
   const apiChunks = useMemo(
     () => dailyRows.length > 0
-      ? buildChunksFromDaily(dailyRows, orders)
-      : buildChunks(orders),
-    [dailyRows, orders],
+      ? buildChunksFromDaily(dailyRows, allOrders)
+      : buildChunks(allOrders),
+    [dailyRows, allOrders],
   );
-  const chunks    = localChunks ?? apiChunks;
+  const allChunks   = localChunks ?? apiChunks;
   const dataLoading = ordersLoading || dailyLoading;
 
-  // Reset edits when source orders change
-  useEffect(() => { setLocalChunks(null); setEdits({}); }, [orders]);
+  // Sub-planner line filter: when lineFilter is set, show only those lines unless toggled
+  const isFiltered  = lineFilter && lineFilter.length > 0 && !showAllLines;
+  const chunks = useMemo(() => {
+    if (!isFiltered) return allChunks;
+    return allChunks.filter(c => lineFilter.includes(c.line));
+  }, [allChunks, isFiltered, lineFilter]);
+  const orders = useMemo(() => {
+    if (!isFiltered) return allOrders;
+    return allOrders.filter(o =>
+      lineFilter.includes(o.line_go) || lineFilter.includes(o.line_may) || lineFilter.includes(o.line)
+    );
+  }, [allOrders, isFiltered, lineFilter]);
+
+  // Reset edits when source orders change (use allOrders, not filtered orders, to avoid reset on filter toggle)
+  useEffect(() => { setLocalChunks(null); setEdits({}); }, [allOrders]);
 
   // Late count: order whose last chunk date > crd
   const lateCount = useMemo(() => {
@@ -229,9 +243,16 @@ export default function Step6Edit({ runId, capacityOverrides, onPrev, onNext, di
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm max-w-[1480px] mx-auto h-full flex flex-col min-h-0">
       {/* Head */}
-      <div className="px-5 py-4 border-b border-gray-100 shrink-0">
-        <div className="text-sm font-semibold text-gray-900">Bước 6 · Chỉnh sửa lịch</div>
-        <div className="text-xs text-gray-500 mt-0.5">Review kết quả · tinh chỉnh nếu cần trước khi xác nhận</div>
+      <div className="px-5 py-4 border-b border-gray-100 shrink-0 flex items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-gray-900">Bước 6 · Chỉnh sửa lịch</div>
+          <div className="text-xs text-gray-500 mt-0.5">Review kết quả · tinh chỉnh nếu cần trước khi xác nhận</div>
+        </div>
+        {viewOnly && (
+          <span className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+            <Eye size={11} /> Chỉ xem · Sub-Planner
+          </span>
+        )}
       </div>
 
       {/* Sub-tabs */}
@@ -249,6 +270,24 @@ export default function Step6Edit({ runId, capacityOverrides, onPrev, onNext, di
             </button>
           ))}
         </div>
+
+        {/* Line filter toggle — when lineFilter prop is set */}
+        {lineFilter && lineFilter.length > 0 && (
+          <div className="flex items-center pl-2 pr-1 border-l border-gray-200 shrink-0">
+            <button
+              onClick={() => setShowAllLines(v => !v)}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                showAllLines
+                  ? "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  : "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
+              }`}
+              title={showAllLines ? "Đang xem tất cả chuyền — nhấn để lọc lại chuyền của bạn" : `Đang lọc: chuyền ${lineFilter.join(", ")}`}
+            >
+              <Layers size={12} />
+              {showAllLines ? "Xem tất cả chuyền" : `Chuyền của tôi (${lineFilter.join(", ")})`}
+            </button>
+          </div>
+        )}
 
         {/* Notification icons — chỉ hiện khi ở tab Lịch sắp xếp */}
         {tab === "lich" && !dataLoading && (
@@ -457,37 +496,44 @@ export default function Step6Edit({ runId, capacityOverrides, onPrev, onNext, di
         <button className={`${BTN} bg-white text-gray-700 border-gray-200 hover:bg-gray-50`} onClick={onPrev}>
           <ChevronLeft size={14} /> Bước trước
         </button>
+        {viewOnly && (
+          <span className="text-xs text-amber-600 font-medium flex items-center gap-1">
+            <Eye size={12} /> Chế độ chỉ xem — không thể chỉnh sửa lịch
+          </span>
+        )}
         <div className="flex-1" />
-        {autoSaveStatus === "saving" && (
+        {!viewOnly && autoSaveStatus === "saving" && (
           <span className="flex items-center gap-1.5 text-xs text-gray-400">
             <Loader2 size={12} className="animate-spin" /> Đang lưu…
           </span>
         )}
-        {autoSaveStatus === "saved" && (
+        {!viewOnly && autoSaveStatus === "saved" && (
           <span className="flex items-center gap-1.5 text-xs text-green-600">
             <CheckCircle2 size={12} /> Đã lưu
           </span>
         )}
-        <div className="relative group">
-          <button
-            disabled={dispatchBlocked}
-            className={[
-              BTN,
-              dispatchBlocked
-                ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-                : "bg-blue-600 text-white border-blue-600 hover:bg-blue-700",
-            ].join(" ")}
-            onClick={onNext}>
-            Bước tiếp <ChevronRight size={14} />
-          </button>
-          {dispatchBlocked && (
-            <div className="absolute bottom-full right-0 mb-2 w-64 px-3 py-2 rounded-lg bg-gray-900 text-white text-xs shadow-lg pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50">
-              <span className="font-semibold text-amber-300">⏳ Đang chờ Sub-Planner xác nhận.</span>
-              <br />Chuyển sang tab <strong>"Theo dõi Sub-Planner"</strong> để xem trạng thái.
-              <div className="absolute top-full right-4 border-4 border-transparent border-t-gray-900" />
-            </div>
-          )}
-        </div>
+        {!viewOnly && (
+          <div className="relative group">
+            <button
+              disabled={dispatchBlocked}
+              className={[
+                BTN,
+                dispatchBlocked
+                  ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                  : "bg-blue-600 text-white border-blue-600 hover:bg-blue-700",
+              ].join(" ")}
+              onClick={onNext}>
+              Bước tiếp <ChevronRight size={14} />
+            </button>
+            {dispatchBlocked && (
+              <div className="absolute bottom-full right-0 mb-2 w-64 px-3 py-2 rounded-lg bg-gray-900 text-white text-xs shadow-lg pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50">
+                <span className="font-semibold text-amber-300">⏳ Đang chờ Sub-Planner xác nhận.</span>
+                <br />Chuyển sang tab <strong>"Theo dõi Sub-Planner"</strong> để xem trạng thái.
+                <div className="absolute top-full right-4 border-4 border-transparent border-t-gray-900" />
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

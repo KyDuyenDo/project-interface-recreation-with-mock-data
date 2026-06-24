@@ -16,6 +16,7 @@ import { usePermissions } from "../../hooks/usePermissions";
 import StatusBadge from "./components/StatusBadge";
 import AcceptRunDialog  from "./components/AcceptRunDialog";
 import NewOrdersDialog  from "./components/NewOrdersDialog";
+import SubPlannerRunsPage from "./SubPlannerRunsPage";
 
 const BTN    = "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
 const BTN_SM = "inline-flex items-center gap-1 px-2 py-1 rounded-md border text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
@@ -183,8 +184,8 @@ function BulkDeleteDialog({ selectedRuns, isPending, onClose, onConfirm }) {
   );
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
-export default function RunsPage() {
+// ── Main planner page (all hooks inside, no early return) ────────────────────
+function RunsPageMain() {
   const navigate    = useNavigate();
   const queryClient = useQueryClient();
 
@@ -807,4 +808,11 @@ export default function RunsPage() {
       )}
     </div>
   );
+}
+
+// ── Router: sub-planner vs main planner ───────────────────────────────────────
+export default function RunsPage() {
+  const { isSub } = usePermissions();
+  if (isSub) return <SubPlannerRunsPage />;
+  return <RunsPageMain />;
 }

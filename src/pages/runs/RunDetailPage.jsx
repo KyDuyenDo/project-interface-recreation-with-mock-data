@@ -21,6 +21,8 @@ import Step3MaterialETA from "../ga-config/steps/Step3MaterialETA";
 import Step4GCDates    from "../ga-config/steps/Step4GCDates";
 import RunHistoryDetailPage from "./RunHistoryDetailPage";
 import SubPlannerDispatchPanel from "../../components/dispatch/SubPlannerDispatchPanel";
+import SubStep2Panel from "../sub-planner/SubStep2Panel";
+import { useAuthStore } from "../../store/authStore";
 
 const BTN = "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
 
@@ -408,8 +410,22 @@ export default function RunDetailPage() {
     }
   }, [publishLogs, run?.lifecycle_status]);
 
-  const { isMain, isSub } = usePermissions();
-  const isLocked   = run?.lifecycle_status === "verifying";
+  const { isMain, isSub, myLines } = usePermissions();
+  const { user } = useAuthStore();
+  const isLocked = run?.lifecycle_status === "verifying";
+
+  // Sub-planner: fetch tasks to know which orders are on their lines
+  const { data: myTasksData } = useQuery({
+    queryKey: ["my-tasks", user?.username],
+    queryFn:  () => http.get("/tasks/my", { params: { username: user?.username } }).then(r => r.data),
+    enabled:  !!user && isSub && !!runId,
+    staleTime: 30_000,
+  });
+  const myRunTasks = useMemo(() => {
+    if (!isSub || !myTasksData?.items) return [];
+    return myTasksData.items.filter(t => t.run_id === runId);
+  }, [isSub, myTasksData, runId]);
+  const myOrderIds = useMemo(() => new Set(myRunTasks.filter(t => t.order_id).map(t => t.order_id)), [myRunTasks]);
 
   const handleStartVerification = async () => {
     try {
@@ -568,27 +584,37 @@ export default function RunDetailPage() {
                   />
                 )}
                 {step === 1 && (
-                  <Step2Capacity
-                    selectedRegularIds={selectedRegularIds}
-                    selectedGcIds={selectedGcIds}
-                    knownOrdersMap={knownOrdersMap}
-                    priorityConfig={priorityConfig}
-                    onPriorityConfigChange={NOOP}
-                    workingHoursPerDay={workingHoursPerDay}
-                    onWorkingHoursChange={NOOP}
-                    capChoices={capChoices}
-                    onCapChoicesChange={NOOP}
-                    importedTargetQty={importedTargetQty}
-                    onImportedTargetQtyChange={NOOP}
-                    draftRunId={null}
-                    onPrev={() => setStep(0)}
-                    onNext={() => setStep(2)}
-                    readOnly
-                  />
+                  isSub ? (
+                    <div className="flex-1 min-h-0 overflow-y-auto">
+                      <SubStep2Panel
+                        runId={runId}
+                        myLines={myLines}
+                        dispatchStep={2}
+                      />
+                    </div>
+                  ) : (
+                    <Step2Capacity
+                      selectedRegularIds={selectedRegularIds}
+                      selectedGcIds={selectedGcIds}
+                      knownOrdersMap={knownOrdersMap}
+                      priorityConfig={priorityConfig}
+                      onPriorityConfigChange={NOOP}
+                      workingHoursPerDay={workingHoursPerDay}
+                      onWorkingHoursChange={NOOP}
+                      capChoices={capChoices}
+                      onCapChoicesChange={NOOP}
+                      importedTargetQty={importedTargetQty}
+                      onImportedTargetQtyChange={NOOP}
+                      draftRunId={null}
+                      onPrev={() => setStep(0)}
+                      onNext={() => setStep(2)}
+                      readOnly
+                    />
+                  )
                 )}
                 {step === 2 && (
                   <Step3MaterialETA
-                    selectedIds={allSelectedIds}
+                    selectedIds={isSub && myOrderIds.size > 0 ? myOrderIds : allSelectedIds}
                     materialEtaOverrides={materialEtaOvr}
                     setMaterialEtaOverrides={NOOP}
                     onPrev={() => setStep(1)}
@@ -598,7 +624,7 @@ export default function RunDetailPage() {
                 )}
                 {step === 3 && (
                   <Step4GCDates
-                    gcOrders={gcOrders}
+                    gcOrders={isSub && myOrderIds.size > 0 ? gcOrders.filter(o => myOrderIds.has(o.order_id)) : gcOrders}
                     gcDateOverrides={gcDateOvr}
                     setGcDateOverrides={NOOP}
                     onPrev={() => setStep(2)}
@@ -631,6 +657,8 @@ export default function RunDetailPage() {
               onPrev={() => setStep(4)}
               onNext={NOOP}
               dispatchBlocked={false}
+              lineFilter={isSub && myLines.length > 0 ? myLines : null}
+              viewOnly={isSub}
             />
           </div>
         )}
