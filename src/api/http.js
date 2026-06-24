@@ -600,6 +600,7 @@ function route(method, url, body, config) {
         }
         item.updated_at = new Date().toISOString();
         item.updated_by = body?.updated_by || null;
+        if (body?.action_label) item.action_label = body.action_label;
       }
       return ok({ ok: true, item });
     }

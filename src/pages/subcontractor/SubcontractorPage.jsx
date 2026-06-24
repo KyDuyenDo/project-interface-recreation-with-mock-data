@@ -80,15 +80,26 @@ function SummaryBar({ items }) {
 
 // ── Update / Extend Modal (sub-planner) ───────────────────────────────────────
 function UpdateModal({ item, onClose, onSave }) {
+  const { user } = useAuthStore();
   const [mode, setMode] = useState("update"); // "update" | "extend" | "receive"
   const [newDate, setNewDate] = useState(item.return_confirmed_date || "");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
 
+  const ACTION_LABELS = {
+    receive: "Xác nhận nhận hàng",
+    extend:  "Gia hạn đơn",
+    update:  "Cập nhật ngày trả",
+  };
+
   const handleSave = async () => {
     if (mode !== "receive" && !newDate) return;
     setSaving(true);
-    const body = { updated_by: "sub_planner" };
+    const actor = user?.full_name || user?.username || "Sub Planner";
+    const body = {
+      updated_by:   actor,
+      action_label: ACTION_LABELS[mode],
+    };
     if (mode === "receive") {
       body.actual_return_date = new Date().toISOString().slice(0, 10);
     } else if (mode === "extend") {
@@ -337,7 +348,20 @@ function GCRow({ item, isSubPlanner, onEdit }) {
       <td className="px-4 py-2.5">
         <StatusPill status={item.status} />
         {item.updated_by && (
-          <div className="text-[10px] text-slate-400 mt-1">Cập nhật bởi {item.updated_by}</div>
+          <div className="mt-1.5 flex items-start gap-1.5 rounded-md bg-slate-50 border border-slate-200 px-2 py-1">
+            <span className="mt-px shrink-0 h-3.5 w-3.5 rounded-full bg-emerald-500 flex items-center justify-center text-[8px] text-white font-bold leading-none">
+              {item.updated_by.slice(0, 1).toUpperCase()}
+            </span>
+            <div className="min-w-0">
+              <div className="text-[10px] font-semibold text-slate-700 truncate">{item.updated_by}</div>
+              <div className="text-[9px] text-slate-400 leading-tight">{item.action_label || "Đã cập nhật"}</div>
+              {item.updated_at && (
+                <div className="text-[9px] text-slate-400 leading-tight">
+                  {new Date(item.updated_at).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                </div>
+              )}
+            </div>
+          </div>
         )}
       </td>
 

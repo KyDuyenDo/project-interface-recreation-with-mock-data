@@ -173,7 +173,7 @@ export default function MaterialPage() {
         id: item.id,
         body: {
           material_confirmed: true,
-          confirmed_by: user?.username,
+          confirmed_by: user?.full_name || user?.username,
         },
       });
       toast(`Đã xác nhận NVL về cho đơn ${item.order_id}`, "success");
@@ -364,8 +364,19 @@ function Row({ item, isSubPlanner, onConfirm, onEdit, isPending }) {
       <td className="px-4 py-2.5">
         <StatusPill status={item.status} />
         {item.material_confirmed && item.confirmed_by && item.status === "ready" && (
-          <div className="mt-1 text-[10px] text-slate-400">
-            Xác nhận bởi {item.confirmed_by}
+          <div className="mt-1.5 flex items-start gap-1.5 rounded-md bg-slate-50 border border-slate-200 px-2 py-1">
+            <span className="mt-px shrink-0 h-3.5 w-3.5 rounded-full bg-emerald-500 flex items-center justify-center text-[8px] text-white font-bold leading-none">
+              {item.confirmed_by.slice(0, 1).toUpperCase()}
+            </span>
+            <div className="min-w-0">
+              <div className="text-[10px] font-semibold text-slate-700 truncate">{item.confirmed_by}</div>
+              <div className="text-[9px] text-slate-400 leading-tight">Xác nhận NVL về</div>
+              {item.confirmed_at && (
+                <div className="text-[9px] text-slate-400 leading-tight">
+                  {new Date(item.confirmed_at).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </td>
