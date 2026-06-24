@@ -193,7 +193,7 @@ export default function SubPlannerRunsPage() {
                   </div>
                   <button
                     className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
-                    onClick={() => navigate(`/my-tasks/${activeRun.id}`)}
+                    onClick={() => navigate(`/runs/${activeRun.id}`)}
                   >
                     Chi tiết →
                   </button>
@@ -288,7 +288,7 @@ export default function SubPlannerRunsPage() {
                       <tr
                         key={r.id}
                         className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 cursor-pointer transition-colors"
-                        onClick={() => navigate(`/my-tasks/${r.id}`)}
+                        onClick={() => navigate(`/runs/${r.id}`)}
                       >
                         <td className="px-3 py-3 font-bold text-gray-900 w-14">#{r.id}</td>
                         <td className="px-3 py-3 text-xs font-medium">
@@ -330,7 +330,7 @@ export default function SubPlannerRunsPage() {
                         <td className="px-5 py-3 text-right" onClick={e => e.stopPropagation()}>
                           <button
                             className={`${BTN_SM} bg-white text-gray-700 border-gray-200 hover:bg-gray-50`}
-                            onClick={() => navigate(`/my-tasks/${r.id}`)}
+                            onClick={() => navigate(`/runs/${r.id}`)}
                           >
                             <Eye size={12} /> Chi tiết
                           </button>
