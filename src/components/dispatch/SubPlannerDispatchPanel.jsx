@@ -281,19 +281,18 @@ function OrderRow({ order }) {
       order.status === "confirmed" ? "border-green-200 bg-green-50/20" :
                                      "border-gray-200  bg-white"
     }`}>
-      <button onClick={() => hasReason && setOpen(v => !v)} className={`w-full flex items-center gap-3 px-4 py-3 text-left ${hasReason ? "cursor-pointer" : "cursor-default"}`}>
+      <button onClick={() => hasReason && setOpen(v => !v)} className={`w-full flex items-center gap-2 px-4 py-2.5 text-left ${hasReason ? "cursor-pointer" : "cursor-default"}`}>
         <span className={`w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />
-        <span className="text-sm font-mono font-semibold text-gray-800 w-36 shrink-0">{order.id}</span>
+        <span className="text-sm font-mono font-semibold text-gray-800 min-w-0 flex-1 truncate">{order.id}</span>
         <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-gray-100 text-gray-600 border border-gray-200 shrink-0">{order.line}</span>
-        <div className="flex items-center gap-1 text-xs text-gray-500 shrink-0">
+        <div className="hidden sm:flex items-center gap-1 text-xs text-gray-500 shrink-0">
           <Package size={11} className="text-gray-400" />
           <span>{order.san_luong.toLocaleString()}</span>
         </div>
-        <div className="flex items-center gap-1 text-xs text-gray-500 shrink-0">
+        <div className="hidden sm:flex items-center gap-1 text-xs text-gray-500 shrink-0">
           <CalendarClock size={11} className="text-gray-400" />
           <span>{order.deadline}</span>
         </div>
-        <div className="flex-1" />
         <StatusChip status={order.status} />
         {hasReason && (
           <ChevronRight size={13} className={`text-gray-400 shrink-0 transition-transform ${open ? "rotate-90" : ""}`} />

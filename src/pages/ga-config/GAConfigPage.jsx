@@ -159,7 +159,7 @@ function SubPlannerDrawer({ open, onClose, dispatchStep, runId }) {
       )}
       {/* Drawer panel */}
       <div className={`fixed top-0 right-0 h-full z-40 flex flex-col bg-white shadow-2xl border-l border-gray-200 transition-transform duration-300 ease-in-out ${open ? "translate-x-0" : "translate-x-full"}`}
-        style={{ width: "min(780px, 90vw)" }}>
+        style={{ width: "min(1080px, calc(100vw - 196px))" }}>
         {/* Drawer header */}
         <div className="flex items-center gap-3 px-5 py-3.5 border-b bg-gray-50 shrink-0">
           <Users size={15} className="text-gray-500" />
