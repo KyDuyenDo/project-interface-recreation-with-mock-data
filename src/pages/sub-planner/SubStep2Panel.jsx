@@ -671,72 +671,87 @@ export default function SubStep2Panel({ runId, myLines, dispatchStep = 2 }) {
   };
 
   return (
-    <div className="space-y-4">
-      {/* Line tabs */}
-      <div className="flex gap-2 flex-wrap">
-        {lines.map((lineId, idx) => {
-          const { evaluated, total, done } = getLineStatus(lineId);
-          const isActive = idx === activeLineIdx;
-          return (
-            <button
-              key={lineId}
-              onClick={() => setActiveLineIdx(idx)}
-              className={clsx(
-                "flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-semibold transition-all",
-                isActive
-                  ? "bg-blue-600 text-white border-blue-600 shadow-sm"
-                  : done
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-                    : "bg-white text-gray-700 border-gray-200 hover:border-blue-300 hover:text-blue-600",
-              )}
-            >
-              <Layers size={13} /> {lineId}
-              {done ? (
-                <CheckCircle2 size={14} className={isActive ? "text-white/80" : "text-emerald-500"} />
-              ) : (
-                <span className={clsx(
-                  "px-1.5 py-0.5 rounded-full text-[10px] font-bold",
-                  isActive ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500",
-                )}>
-                  {evaluated}/{total}
-                </span>
-              )}
-            </button>
-          );
-        })}
+    <div className="flex flex-col h-full">
+      {/* ── Line tab bar (matches RunDetailForSub style) ── */}
+      <div className="shrink-0 bg-white border-b border-gray-200">
+        <div className="flex items-center gap-0 px-5 overflow-x-auto">
+          {lines.map((lineId, idx) => {
+            const { evaluated, total, done } = getLineStatus(lineId);
+            const isActive = idx === activeLineIdx;
+            return (
+              <button
+                key={lineId}
+                onClick={() => setActiveLineIdx(idx)}
+                className={clsx(
+                  "flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap",
+                  isActive
+                    ? "border-blue-600 text-blue-700 bg-blue-50/50"
+                    : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50",
+                )}
+              >
+                <Layers size={12} />
+                {lineId}
+                {done ? (
+                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 ml-0.5">
+                    ✓
+                  </span>
+                ) : evaluated > 0 ? (
+                  <span className={clsx(
+                    "px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-0.5",
+                    isActive ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700",
+                  )}>
+                    {evaluated}/{total}
+                  </span>
+                ) : (
+                  <span className={clsx(
+                    "px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-0.5",
+                    isActive ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-500",
+                  )}>
+                    {total}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Active line content */}
-      {activeLineId && (
-        <LineContent
-          lineId={activeLineId}
-          tasks={activeTasks}
-          scheduleData={scheduleData}
-          decisions={lineDecisions}
-          onDecide={handleDecide}
-          submitted={alreadySubmitted}
-        />
-      )}
+      {/* ── Content area ── */}
+      <div className="flex-1 overflow-auto bg-gray-50 p-5">
+        <div className="space-y-4">
+          {/* Active line content */}
+          {activeLineId && (
+            <LineContent
+              lineId={activeLineId}
+              tasks={activeTasks}
+              scheduleData={scheduleData}
+              decisions={lineDecisions}
+              onDecide={handleDecide}
+              submitted={alreadySubmitted}
+            />
+          )}
 
-      {/* Submit panel */}
-      {!alreadySubmitted && lines.length > 0 && (
-        <FinalSubmitPanel
-          runId={runId}
-          lines={lines}
-          runTasks={runTasks}
-          allDecisions={allDecisions}
-          step={dispatchStep}
-          user={user}
-          onSubmitSuccess={() => setSubmitted(true)}
-        />
-      )}
+          {/* Submit panel */}
+          {!alreadySubmitted && lines.length > 0 && (
+            <FinalSubmitPanel
+              runId={runId}
+              lines={lines}
+              runTasks={runTasks}
+              allDecisions={allDecisions}
+              step={dispatchStep}
+              user={user}
+              onSubmitSuccess={() => setSubmitted(true)}
+            />
+          )}
 
-      {alreadySubmitted && (
-        <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-emerald-50 border border-emerald-200 text-sm text-emerald-700 font-semibold">
-          <CheckCircle2 size={16} className="text-emerald-500" />
-          Bạn đã gửi xác nhận cho Main Planner. Kết quả đã được ghi nhận.
+          {alreadySubmitted && (
+            <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-emerald-50 border border-emerald-200 text-sm text-emerald-700 font-semibold">
+              <CheckCircle2 size={16} className="text-emerald-500" />
+              Bạn đã gửi xác nhận cho Main Planner. Kết quả đã được ghi nhận.
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
