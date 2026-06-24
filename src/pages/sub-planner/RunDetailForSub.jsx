@@ -869,7 +869,7 @@ export default function RunDetailForSub() {
     return (
       <div className="flex flex-col h-full">
         <header className="flex items-center h-14 px-5 border-b border-gray-200 bg-white gap-3">
-          <button onClick={() => navigate("/my-tasks")} className={`${BTN_SM} bg-white border-gray-200 text-gray-600 hover:bg-gray-50`}>
+          <button onClick={() => navigate("/runs")} className={`${BTN_SM} bg-white border-gray-200 text-gray-600 hover:bg-gray-50`}>
             <ArrowLeft size={13} /> Quay lại
           </button>
         </header>
@@ -891,7 +891,7 @@ export default function RunDetailForSub() {
       {/* Header */}
       <header className="shrink-0 bg-white border-b border-gray-200">
         <div className="flex items-center gap-3 h-14 px-5">
-          <button onClick={() => navigate("/my-tasks")} className={`${BTN_SM} bg-white border-gray-200 text-gray-600 hover:bg-gray-50`}>
+          <button onClick={() => navigate("/runs")} className={`${BTN_SM} bg-white border-gray-200 text-gray-600 hover:bg-gray-50`}>
             <ArrowLeft size={13} /> Danh sách
           </button>
           <div className="h-4 w-px bg-gray-200" />
