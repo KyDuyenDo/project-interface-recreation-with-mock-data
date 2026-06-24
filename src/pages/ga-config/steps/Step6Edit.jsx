@@ -378,6 +378,7 @@ export default function Step6Edit({ runId, capacityOverrides, onPrev, onNext, di
               onChunkChanged={handleChunkChanged}
               usingFallback={dailyRows.length === 0 && orders.length > 0}
               hasDailyData={dailyRows.length > 0}
+              viewOnly={viewOnly}
             />
           )
         )}

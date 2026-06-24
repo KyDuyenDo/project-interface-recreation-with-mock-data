@@ -286,47 +286,73 @@ function LineInfoPanel({ lineId, tasks, scheduleData, decisions }) {
   const allDone     = evaluated === total && total > 0;
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-wrap gap-6 items-start">
-      <div>
-        <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Mã chuyền</div>
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-sm font-bold bg-blue-100 text-blue-700 border border-blue-200">
-          <Layers size={12} /> {lineId}
-        </span>
-      </div>
-      <div>
-        <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Công suất mục tiêu</div>
-        <div className="text-sm font-bold text-gray-800">{cap.toLocaleString()} <span className="font-normal text-gray-400 text-xs">đôi/ngày</span></div>
-      </div>
-      <div>
-        <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Sử dụng hôm nay</div>
-        <div className="flex items-center gap-2">
-          <div className="text-sm font-bold text-gray-800">{utilPct}%</div>
-          <div className="w-20 h-2 rounded-full bg-gray-100 overflow-hidden">
-            <div className={clsx("h-full rounded-full", utilPct > 90 ? "bg-red-400" : utilPct > 70 ? "bg-amber-400" : "bg-green-400")}
-              style={{ width: `${Math.min(utilPct, 100)}%` }} />
+    <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-wrap items-center justify-between shadow-sm">
+      <div className="flex flex-wrap items-center gap-6">
+        <div>
+          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">MÃ CHUYỀN</div>
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-sm font-bold bg-blue-100 text-blue-700 border border-blue-200">
+            <Layers size={12} /> {lineId}
+          </span>
+        </div>
+
+        <div className="h-8 w-px bg-gray-200 hidden sm:block" />
+
+        <div>
+          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">CÔNG SUẤT MỤC TIÊU</div>
+          <div className="text-sm font-bold text-gray-800">
+            {cap.toLocaleString()} <span className="font-normal text-gray-400 text-[10px]">đôi/ngày</span>
+          </div>
+        </div>
+
+        <div className="h-8 w-px bg-gray-200 hidden sm:block" />
+
+        <div>
+          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">SỬ DỤNG HÔM NAY</div>
+          <div className="flex items-center gap-2">
+            <div className="text-sm font-bold text-gray-800">{utilPct}%</div>
+            <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className={clsx(
+                  "h-full rounded-full",
+                  utilPct > 90 ? "bg-red-400" : utilPct > 70 ? "bg-amber-400" : "bg-emerald-400"
+                )}
+                style={{ width: `${Math.min(utilPct, 100)}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="h-8 w-px bg-gray-200 hidden sm:block" />
+
+        <div>
+          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">TỔNG SẢN LƯỢNG PHÂN CÔNG</div>
+          <div className="text-sm font-bold text-gray-800">
+            {totalQty.toLocaleString()} <span className="font-normal text-gray-400 text-[10px]">đôi</span>
           </div>
         </div>
       </div>
-      <div>
-        <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Tổng sản lượng phân công</div>
-        <div className="text-sm font-bold text-gray-800">{totalQty.toLocaleString()} <span className="font-normal text-gray-400 text-xs">đôi</span></div>
-      </div>
-      <div className="ml-auto">
-        <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Đánh giá đơn hàng</div>
+
+      <div className="text-right mt-3 md:mt-0">
+        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">ĐÁNH GIÁ ĐƠN HÀNG</div>
         {allDone ? (
-          <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700">
-            <CheckCircle2 size={13} className="text-emerald-500" />
-            {total}/{total} đơn đã xử lý — Sẵn sàng gửi
+          <div className="text-xs font-bold text-emerald-600 flex items-center justify-end gap-1">
+            <CheckCircle2 size={12} className="text-emerald-500 stroke-[3px]" />
+            <span>{evaluated}/{total} đơn đã xử lý — Sẵn sàng gửi</span>
           </div>
         ) : (
-          <div className="text-sm font-bold text-gray-800">
-            {evaluated}<span className="text-gray-400 font-normal">/{total}</span>
-            <span className="text-xs font-normal text-gray-400 ml-1">đơn đã xử lý</span>
+          <div className="text-xs font-bold text-blue-600 flex items-center justify-end gap-1">
+            <Clock size={12} className="text-blue-500" />
+            <span>{evaluated}/{total} đơn đã xử lý</span>
           </div>
         )}
-        <div className="mt-1.5 w-32 h-1.5 rounded-full bg-gray-100 overflow-hidden">
-          <div className={clsx("h-full rounded-full transition-all", allDone ? "bg-emerald-400" : "bg-blue-400")}
-            style={{ width: total > 0 ? `${(evaluated / total) * 100}%` : "0%" }} />
+        <div className="mt-1.5 w-48 h-1.5 bg-gray-100 rounded-full overflow-hidden ml-auto">
+          <div
+            className={clsx(
+              "h-full rounded-full transition-all",
+              allDone ? "bg-emerald-500" : "bg-blue-500"
+            )}
+            style={{ width: total > 0 ? `${(evaluated / total) * 100}%` : "0%" }}
+          />
         </div>
       </div>
     </div>
@@ -517,8 +543,11 @@ function FinalSubmitPanel({ runId, lines, runTasks, allDecisions, step, user, on
     const total    = tasks.length;
     const accepted = tasks.filter(t => decs[t.order_id]?.status === "accepted").length;
     const rejected = tasks.filter(t => decs[t.order_id]?.status === "rejected").length;
-    return { lineId, total, accepted, rejected, evaluated: accepted + rejected };
+    const evaluated = accepted + rejected;
+    const pct = total > 0 ? Math.round((evaluated / total) * 100) : 0;
+    return { lineId, total, accepted, rejected, evaluated, pct };
   });
+
   const grandTotal     = lineStats.reduce((s, l) => s + l.total, 0);
   const grandEvaluated = lineStats.reduce((s, l) => s + l.evaluated, 0);
   const grandAccepted  = lineStats.reduce((s, l) => s + l.accepted, 0);
@@ -547,38 +576,61 @@ function FinalSubmitPanel({ runId, lines, runTasks, allDecisions, step, user, on
   };
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-      <div className="flex items-center gap-3 px-5 py-3 border-b border-gray-100 bg-gray-50">
-        <Send size={14} className="text-blue-500" />
-        <span className="text-sm font-semibold text-gray-900">Tổng kết & Gửi xác nhận</span>
+    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+      <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-100 bg-gray-50 text-xs font-bold text-gray-700">
+        <Send size={13} className="text-blue-500" />
+        <span>Gửi kết quả cho Main Planner</span>
       </div>
-      <div className="p-5 space-y-3">
-        <div className="grid grid-cols-4 gap-3">
-          {[
-            { label: "Tổng đơn",   value: grandTotal,     cls: "bg-gray-50 text-gray-700" },
-            { label: "Chấp nhận",  value: grandAccepted,  cls: "bg-emerald-50 text-emerald-700" },
-            { label: "Từ chối",    value: grandRejected,  cls: "bg-red-50 text-red-700" },
-            { label: "Chờ đánh giá", value: grandPending, cls: grandPending > 0 ? "bg-amber-50 text-amber-700" : "bg-gray-50 text-gray-400" },
-          ].map(c => (
-            <div key={c.label} className={`rounded-lg p-3 text-center ${c.cls}`}>
-              <div className="text-xl font-bold">{c.value}</div>
-              <div className="text-[10px] mt-0.5 font-medium opacity-75">{c.label}</div>
+      <div className="p-5 space-y-4">
+        {/* Progress bar per line */}
+        <div className="space-y-3">
+          {lineStats.map(stat => (
+            <div key={stat.lineId} className="flex items-center gap-3 text-xs">
+              <span className="w-16 font-bold text-gray-700">{stat.lineId}</span>
+              <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden relative">
+                <div
+                  className={clsx(
+                    "h-full rounded-full transition-all",
+                    stat.pct === 100 ? "bg-emerald-500" : "bg-blue-500"
+                  )}
+                  style={{ width: `${stat.pct}%` }}
+                />
+              </div>
+              <span className="w-20 text-right font-medium">
+                {stat.pct === 100 ? (
+                  <span className="text-emerald-600 font-bold flex items-center justify-end gap-1">
+                    ✓ Hoàn tất
+                  </span>
+                ) : (
+                  <span className="text-gray-500">{stat.evaluated}/{stat.total} đơn</span>
+                )}
+              </span>
             </div>
           ))}
         </div>
-        <button
-          disabled={!canSubmit || submitting}
-          onClick={handleSubmit}
-          className={clsx(
-            "w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-colors",
-            canSubmit
-              ? "bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
-              : "bg-gray-100 text-gray-400 cursor-not-allowed",
-          )}
-        >
-          {submitting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-          {canSubmit ? "Gửi xác nhận cho Main Planner" : `Còn ${grandPending} đơn chưa đánh giá`}
-        </button>
+
+        {/* Bottom bar with summary and submit button */}
+        <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+          <div className="flex items-center gap-4 text-xs font-medium text-gray-600">
+            <span>Tổng: <strong className="text-gray-900">{grandTotal} đơn</strong></span>
+            <span>Chấp nhận: <strong className="text-emerald-600">{grandAccepted}</strong></span>
+            <span>Từ chối: <strong className={grandRejected > 0 ? "text-red-600" : "text-gray-900"}>{grandRejected}</strong></span>
+          </div>
+
+          <button
+            disabled={!canSubmit || submitting}
+            onClick={handleSubmit}
+            className={clsx(
+              "px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm",
+              canSubmit
+                ? "bg-blue-600 hover:bg-blue-700 text-white"
+                : "bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200",
+            )}
+          >
+            {submitting ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+            <span>Gửi kết quả cho Main Planner</span>
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -683,31 +735,19 @@ export default function SubStep2Panel({ runId, myLines, dispatchStep = 2 }) {
                 key={lineId}
                 onClick={() => setActiveLineIdx(idx)}
                 className={clsx(
-                  "flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap",
+                  "flex items-center gap-1.5 px-5 py-3 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap",
                   isActive
-                    ? "border-blue-600 text-blue-700 bg-blue-50/50"
+                    ? "border-blue-600 text-blue-600 bg-blue-50/10"
                     : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50",
                 )}
               >
-                <Layers size={12} />
-                {lineId}
+                <Layers size={13} className={isActive ? "text-blue-600" : "text-gray-400"} />
+                <span>{lineId}</span>
                 {done ? (
-                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 ml-0.5">
-                    ✓
-                  </span>
-                ) : evaluated > 0 ? (
-                  <span className={clsx(
-                    "px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-0.5",
-                    isActive ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700",
-                  )}>
-                    {evaluated}/{total}
-                  </span>
+                  <Check size={13} className="text-emerald-500 stroke-[3px]" />
                 ) : (
-                  <span className={clsx(
-                    "px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-0.5",
-                    isActive ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-500",
-                  )}>
-                    {total}
+                  <span className="text-[10px] font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full">
+                    {evaluated}/{total}
                   </span>
                 )}
               </button>

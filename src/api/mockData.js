@@ -108,6 +108,7 @@ export const RUNS = [
     label: "run_20260620_run", status: "running", lifecycle_status: "draft",
     generation: 210, fitness: null, on_time_pct: null, scheduled_count: null,
     step_progress: 3, step_name: "TailFollowAllocator",
+    wizard_step: 1, // step 2: Ưu tiên & Chuyền
   }),
   makeRun(43, {
     label: "run_20260620_fail", status: "failed", lifecycle_status: "draft",
@@ -831,8 +832,49 @@ export let MOCK_TASK_ASSIGNMENTS = (() => {
           started_at: addDays(TODAY, -2).toISOString(), step_label: "Ưu tiên & Chuyền" },
     47: { run_id: 47, run_label: "run_20260620_verify", period_label: "Tháng 6/2026",
           started_at: addDays(TODAY, -5).toISOString(), step_label: "Review lịch" },
+    44: { run_id: 44, run_label: "run_20260620_run", period_label: "Tháng 6/2026",
+          started_at: addDays(TODAY, -1).toISOString(), step_label: "Ưu tiên & Chuyền" },
   };
   Object.assign(tasks, { _runMeta: RUN_META }); // attach for http.js to read
+
+  // Step 2 tasks for Run 44 (the active wizard run, pending)
+  Object.values(MOCK_LINE_ASSIGNMENTS).forEach((la, i) => {
+    const runId = 44;
+    // 2 primary orders per line
+    const primaryOrders = WIZARD_REGULAR_SOURCES.slice(i * 2 + 10, i * 2 + 12);
+    primaryOrders.forEach((r, oi) => {
+      const prodStart = addDays(TODAY, ri(2, 8));
+      const prodEnd   = addDays(prodStart, ri(4, 10));
+      tasks.push({
+        id: tasks.length + 1,
+        run_id: runId,
+        run_label: RUN_META[runId].run_label,
+        period_label: RUN_META[runId].period_label,
+        run_started_at: RUN_META[runId].started_at,
+        step: 2,
+        step_label: "Ưu tiên & Chuyền",
+        planner_username: la.planner_username,
+        planner_name: la.planner_name,
+        line_id: la.line_id,
+        order_id: r.RY,
+        article: r.Article,
+        model: r.XieMing,
+        customer: r.CUSTNAME,
+        qty: r.QTY,
+        crd: r.CRD,
+        prod_start: isoDate(prodStart),
+        prod_end:   isoDate(prodEnd),
+        is_support: false,
+        main_line_id: null,
+        status: "pending",
+        reject_reason: null,
+        qty_override: null,
+        confirmed_at: null,
+        note: null,
+        created_at: addDays(TODAY, -1).toISOString(),
+      });
+    });
+  });
 
   // Step 2 tasks — primary + support orders per line
   Object.values(MOCK_LINE_ASSIGNMENTS).forEach((la, i) => {
@@ -951,6 +993,17 @@ export let MOCK_NOTIFICATIONS = (() => {
   const notes = [];
   Object.values(MOCK_USERS).forEach((u) => {
     if (u.role !== "sub_planner") return;
+    notes.push({
+      id: notes.length + 1,
+      to_username: u.username,
+      kind: "task_assigned",
+      title: "Công việc mới được phân công",
+      body: `Main Planner đã phân công bạn xác nhận lịch chuyền ${u.assigned_lines[0]} cho Run #44`,
+      run_id: 44,
+      step: 2,
+      is_read: false,
+      created_at: new Date().toISOString(),
+    });
     notes.push({
       id: notes.length + 1,
       to_username: u.username,

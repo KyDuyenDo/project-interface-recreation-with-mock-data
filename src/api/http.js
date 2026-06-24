@@ -315,6 +315,14 @@ function route(method, url, body, config) {
       return ok({ ok: true });
     }
     // GET — return approval status per step
+    const step = params.step ? parseInt(params.step) : null;
+    const username = params.username || "";
+    const filterTasks = M.MOCK_TASK_ASSIGNMENTS.filter(t =>
+      t.run_id === runId &&
+      (!step || t.step === step) &&
+      (!username || t.planner_username === username)
+    );
+
     const tasks = M.MOCK_TASK_ASSIGNMENTS.filter(t => t.run_id === runId);
     const byStep = {};
     tasks.forEach(t => {
@@ -322,13 +330,27 @@ function route(method, url, body, config) {
       byStep[t.step].total++;
       byStep[t.step][t.status] = (byStep[t.step][t.status] || 0) + 1;
     });
-    return ok({ by_step: byStep, tasks });
+
+    let status = "pending";
+    if (filterTasks.length > 0) {
+      const hasRejected = filterTasks.some(t => t.status === "rejected");
+      const allConfirmed = filterTasks.every(t => t.status === "confirmed");
+      status = hasRejected ? "rejected" : allConfirmed ? "confirmed" : "pending";
+    }
+
+    return ok({ by_step: byStep, tasks, status });
+  }
+
+  if (p[0] === "runs" && p[2] === "sub-schedule" && p[3]) {
+    const lineId = p[3];
+    const data = M.makeLineCapacityData([lineId])?.by_line?.[lineId] || null;
+    return ok(data);
   }
 
   // ── Runs ──────────────────────────────────────────────────────────────────
   if (p[0] === "runs") {
     if (p[1] === "active") return ok(M.RUNS.find((r) => r.lifecycle_status === "active") || null);
-    if (p[1] === "wizard-in-progress") return ok(null);
+    if (p[1] === "wizard-in-progress") return ok(M.RUNS.find((r) => r.id === 44) || null);
     if (p[1] === "wizard-close-stale" && m === "POST") return ok({ closed: 0 });
     if (p[1] === "draft" && m === "POST") return ok({ id: 100, label: body?.label || "draft", status: "draft", lifecycle_status: "draft" });
     if (p[1] === "publish-logs" && p[3] === "details") return ok({ items: [] });

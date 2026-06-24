@@ -2,9 +2,9 @@ import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Download, Check, AlertTriangle, Loader2,
-  CheckCircle, RefreshCw, X, Eye, Users, CheckCircle2, PanelRightOpen,
+  CheckCircle, RefreshCw, X, Eye, Users, CheckCircle2, PanelRightOpen, Lock,
 } from "lucide-react";
-import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import {
   useRunDetail, useRunStatus, useRunWarnings, useRunOutputOrders,
   useVerifyRun, usePublishLogs, usePublishLogDetails, useActiveRun,
@@ -33,7 +33,7 @@ const PIPELINE_STEPS = [
 
 const STEPS = [
   { key: "orders",   title: "Chọn đơn",   subtitle: "Nhập mã hoặc Excel" },
-  { key: "capacity", title: "Ưu tiên",    subtitle: "Chuyền theo model" },
+  { key: "capacity", title: "Năng lực chuyền", subtitle: "Xác nhận năng lực" },
   { key: "mat",      title: "NVL về",     subtitle: "Ngày vật liệu" },
   { key: "gc_dates", title: "Ngày GC",    subtitle: "Thu gia công" },
   { key: "run",      title: "Chạy lịch",  subtitle: "TailFollow + ILS" },
@@ -123,41 +123,49 @@ function SubPlannerDrawer({ open, onClose, dispatchStep, runId }) {
 }
 
 // ── Completed WizardStepper ────────────────────────────────────────────────────
-function CompletedStepper({ step, onGoStep, rightSlot }) {
+function CompletedStepper({ step, onGoStep, isStepLocked, rightSlot }) {
   return (
     <div className="flex border-b border-gray-200 bg-white shrink-0 overflow-x-auto items-center">
       {STEPS.map((s, i) => {
         const isCurrent = i === step;
+        const locked    = isStepLocked ? isStepLocked(i) : false;
 
         return (
           <button
             key={s.key}
-            onClick={() => onGoStep(i)}
+            disabled={locked}
+            onClick={() => !locked && onGoStep(i)}
             className={[
-              "flex items-center gap-2 px-4 py-3 border-b-2 text-sm font-medium transition-colors min-w-0 whitespace-nowrap cursor-pointer",
+              "flex items-center gap-2 px-4 py-3 border-b-2 text-sm font-medium transition-colors min-w-0 whitespace-nowrap",
               isCurrent
-                ? "border-blue-600 text-blue-700 bg-blue-50/50"
-                : i < 4
-                  ? "border-amber-300 text-amber-700 hover:bg-amber-50"
-                  : "border-green-400 text-green-700 hover:bg-gray-50",
+                ? "border-blue-600 text-blue-700 bg-blue-50/50 cursor-pointer"
+                : locked
+                  ? "border-transparent text-gray-300 cursor-not-allowed bg-gray-50/20"
+                  : i < 4
+                    ? "border-amber-300 text-amber-700 hover:bg-amber-50 cursor-pointer"
+                    : "border-green-400 text-green-700 hover:bg-gray-50 cursor-pointer",
             ].join(" ")}
           >
             <div className={[
               "w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0",
               isCurrent
                 ? "bg-blue-600 text-white"
-                : i < 4
-                  ? "bg-amber-100 text-amber-700"
-                  : "bg-green-500 text-white",
+                : locked
+                  ? "bg-gray-150 text-gray-300"
+                  : i < 4
+                    ? "bg-amber-100 text-amber-700"
+                    : "bg-green-500 text-white",
             ].join(" ")}>
               {isCurrent
                 ? i + 1
-                : i < 4
-                  ? <Eye size={10} />
-                  : <Check size={12} />}
+                : locked
+                  ? <Lock size={9} className="text-gray-400" />
+                  : i < 4
+                    ? <Eye size={10} />
+                    : <Check size={12} />}
             </div>
             <div className="text-left hidden sm:block">
-              <div className="text-xs font-medium leading-tight">{s.title}</div>
+              <div className={`text-xs font-semibold leading-tight ${locked ? 'text-gray-400' : ''}`}>{s.title}</div>
               <div className="text-[10px] leading-tight opacity-60">{s.subtitle}</div>
             </div>
           </button>
@@ -414,6 +422,142 @@ export default function RunDetailPage() {
   const { user } = useAuthStore();
   const isLocked = run?.lifecycle_status === "verifying";
 
+  // Sub-planner states for step 3 & 4 editing
+  const [localEtaOverrides, setLocalEtaOverrides] = useState({});
+  const [localGcDateOverrides, setLocalGcDateOverrides] = useState({});
+
+  useEffect(() => {
+    if (wEta?.overrides) {
+      setLocalEtaOverrides(wEta.overrides);
+    }
+  }, [wEta]);
+
+  useEffect(() => {
+    if (wGcDates?.gc_dates) {
+      setLocalGcDateOverrides(wGcDates.gc_dates);
+    }
+  }, [wGcDates]);
+
+  const saveEtaMutation = useMutation({
+    mutationFn: (overrides) => wizardStateApi.putMaterialEtas(runId, { overrides }).then(r => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["wiz-eta", runId] });
+    },
+  });
+
+  const saveGcMutation = useMutation({
+    mutationFn: (gc_dates) => wizardStateApi.putGcDates(runId, { gc_dates }).then(r => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["wiz-gc", runId] });
+    },
+  });
+
+  const handleSaveMaterialEtas = (updater) => {
+    setLocalEtaOverrides((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      saveEtaMutation.mutate(next);
+      return next;
+    });
+  };
+
+  const handleSaveGcDates = (updater) => {
+    setLocalGcDateOverrides((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      saveGcMutation.mutate(next);
+      return next;
+    });
+  };
+
+  // Sub-planner: query dispatch status for Step 2
+  const { data: step2DispatchStatus } = useQuery({
+    queryKey:  ["dispatch-status-step2", runId],
+    queryFn:   () => http.get(`/runs/${runId}/dispatch-status`, { params: { step: 2 } }).then(r => r.data),
+    enabled:   !!runId && isSub,
+    staleTime: 30_000,
+  });
+
+  const isStep2Dispatched = !!step2DispatchStatus?.dispatched;
+
+  const isStepLocked = (idx) => {
+    if (!isSub) return false;
+    if (run?.lifecycle_status === "active") return false; // Active runs are finished and read-only, not locked.
+    
+    // Check if the step is locked for the sub-planner:
+    if (idx === 1) {
+      // Step 2: Năng lực chuyền. Active when dispatched.
+      return !isStep2Dispatched;
+    }
+    if (idx === 2) {
+      // Step 3: NVL về. Active when wizard_step >= 2.
+      return (run?.wizard_step ?? 0) < 2;
+    }
+    if (idx === 3) {
+      // Step 4: Ngày GC. Active when wizard_step >= 3.
+      return (run?.wizard_step ?? 0) < 3;
+    }
+    if (idx === 4) {
+      // Step 5: Kết quả GA. Active when wizard_step >= 4 or status === done/running.
+      return (run?.wizard_step ?? 0) < 4 && run?.status !== "done" && run?.status !== "running";
+    }
+    if (idx === 5) {
+      // Step 6: Chỉnh sửa. Active when wizard_step >= 5.
+      return (run?.wizard_step ?? 0) < 5;
+    }
+    return false;
+  };
+
+  const getStepLockMessage = (idx) => {
+    if (idx === 1) {
+      return {
+        title: "Chưa mở cổng xác nhận năng lực",
+        desc: "Main Planner chưa gửi yêu cầu phân công xác nhận năng lực chuyền cho bước này.",
+      };
+    }
+    if (idx === 2) {
+      return {
+        title: "Đang chờ Main Planner",
+        desc: "Bước này chưa được kích hoạt. Vui lòng chờ Main Planner chuyển sang Bước 3 (Vật liệu về).",
+      };
+    }
+    if (idx === 3) {
+      return {
+        title: "Đang chờ Main Planner",
+        desc: "Bước này chưa được kích hoạt. Vui lòng chờ Main Planner chuyển sang Bước 4 (Ngày gia công).",
+      };
+    }
+    if (idx === 4) {
+      return {
+        title: "Đang chờ chạy GA",
+        desc: "Bước này chưa được kích hoạt. Vui lòng chờ Main Planner chạy tối ưu GA lịch sản xuất.",
+      };
+    }
+    if (idx === 5) {
+      return {
+        title: "Chưa mở cổng tinh chỉnh",
+        desc: "Bước này chưa được kích hoạt. Vui lòng chờ Main Planner chạy tối ưu GA và mở cổng tinh chỉnh lịch.",
+      };
+    }
+    return {
+      title: "Chưa kích hoạt",
+      desc: "Bước này hiện chưa khả dụng đối với Sub-Planner.",
+    };
+  };
+
+  const renderLockedStep = (idx) => {
+    const msg = getStepLockMessage(idx);
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gray-50/50">
+        <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-200/80 flex flex-col items-center text-center max-w-sm">
+          <div className="w-12 h-12 bg-amber-50 rounded-full flex items-center justify-center text-amber-500 mb-4 border border-amber-100">
+            <Lock size={20} />
+          </div>
+          <h3 className="font-bold text-gray-900 text-base mb-1.5">{msg.title}</h3>
+          <p className="text-gray-500 text-xs leading-relaxed">{msg.desc}</p>
+        </div>
+      </div>
+    );
+  };
+
   // Sub-planner: fetch tasks to know which orders are on their lines
   const { data: myTasksData } = useQuery({
     queryKey: ["my-tasks", user?.username],
@@ -570,6 +714,8 @@ export default function RunDetailPage() {
                 <Loader2 size={28} className="animate-spin text-blue-500" />
                 <span className="ml-2 text-sm text-gray-500">Đang tải cấu hình…</span>
               </div>
+            ) : isStepLocked(step) ? (
+              renderLockedStep(step)
             ) : (
               <>
                 {step === 0 && (
@@ -615,21 +761,21 @@ export default function RunDetailPage() {
                 {step === 2 && (
                   <Step3MaterialETA
                     selectedIds={isSub && myOrderIds.size > 0 ? myOrderIds : allSelectedIds}
-                    materialEtaOverrides={materialEtaOvr}
-                    setMaterialEtaOverrides={NOOP}
+                    materialEtaOverrides={isSub ? localEtaOverrides : materialEtaOvr}
+                    setMaterialEtaOverrides={isSub ? handleSaveMaterialEtas : NOOP}
                     onPrev={() => setStep(1)}
                     onNext={() => setStep(3)}
-                    readOnly
+                    readOnly={isSub ? (run?.lifecycle_status === "active" || (run?.wizard_step ?? 0) < 2) : true}
                   />
                 )}
                 {step === 3 && (
                   <Step4GCDates
                     gcOrders={isSub && myOrderIds.size > 0 ? gcOrders.filter(o => myOrderIds.has(o.order_id)) : gcOrders}
-                    gcDateOverrides={gcDateOvr}
-                    setGcDateOverrides={NOOP}
+                    gcDateOverrides={isSub ? localGcDateOverrides : gcDateOvr}
+                    setGcDateOverrides={isSub ? handleSaveGcDates : NOOP}
                     onPrev={() => setStep(2)}
                     onNext={() => setStep(4)}
-                    readOnly
+                    readOnly={isSub ? (run?.lifecycle_status === "active" || (run?.wizard_step ?? 0) < 3) : true}
                   />
                 )}
               </>
@@ -639,28 +785,32 @@ export default function RunDetailPage() {
 
         {/* ── Step 5: completed RunGA summary ──────────────────────────────── */}
         {step === 4 && (
-          <CompletedRunView
-            run={run}
-            warnings={warnings}
-            publishLogs={publishLogs}
-            onShowLogDetails={(id) => { setActiveLogId(id); setDrawerOpen(true); }}
-            onRetryVerification={handleStartVerification}
-            isMain={isMain}
-          />
+          isStepLocked(4) ? renderLockedStep(4) : (
+            <CompletedRunView
+              run={run}
+              warnings={warnings}
+              publishLogs={publishLogs}
+              onShowLogDetails={(id) => { setActiveLogId(id); setDrawerOpen(true); }}
+              onRetryVerification={handleStartVerification}
+              isMain={isMain}
+            />
+          )
         )}
 
         {/* ── Step 6: editable Chỉnh sửa lịch ─────────────────────────────── */}
         {step === 5 && (
-          <div className="absolute inset-0 p-5 overflow-hidden flex flex-col">
-            <Step6Edit
-              runId={runId}
-              onPrev={() => setStep(4)}
-              onNext={NOOP}
-              dispatchBlocked={false}
-              lineFilter={isSub && myLines.length > 0 ? myLines : null}
-              viewOnly={isSub}
-            />
-          </div>
+          isStepLocked(5) ? renderLockedStep(5) : (
+            <div className="absolute inset-0 p-5 overflow-hidden flex flex-col">
+              <Step6Edit
+                runId={runId}
+                onPrev={() => setStep(4)}
+                onNext={NOOP}
+                dispatchBlocked={false}
+                lineFilter={isSub && myLines.length > 0 ? myLines : null}
+                viewOnly={isSub ? (run?.lifecycle_status === "active" || (run?.wizard_step ?? 0) < 5) : false}
+              />
+            </div>
+          )
         )}
       </div>
 

@@ -30,7 +30,7 @@ function fillStyle(actual, target) {
 // ─── ScheduleCalendar ────────────────────────────────────────────────────────
 // Props lifted to Step6Edit: chunks, setChunks, edits, setEdits
 
-export default function ScheduleCalendar({ runId, orders, chunks, initialChunks, setChunks, edits, setEdits, onChunkChanged, usingFallback, hasDailyData }) {
+export default function ScheduleCalendar({ runId, orders, chunks, initialChunks, setChunks, edits, setEdits, onChunkChanged, usingFallback, hasDailyData, viewOnly = false }) {
   const [month,       setMonth]       = useState(null);
   const [search,      setSearch]      = useState("");
   const [rangeFrom,   setRangeFrom]   = useState("");
@@ -185,6 +185,7 @@ export default function ScheduleCalendar({ runId, orders, chunks, initialChunks,
 
   // ── Mutation helpers ──────────────────────────────────────────────────────
   const moveChunk = (id, line, date) => {
+    if (viewOnly) return;
     const cur = chunks.find(c => c.id === id);
     if (cur && cur.line === line && cur.date === date) return;
     setChunks(chunks.map(c => c.id === id ? { ...c, line, date } : c));
@@ -198,6 +199,7 @@ export default function ScheduleCalendar({ runId, orders, chunks, initialChunks,
     });
   };
   const deleteChunk = (id) => {
+    if (viewOnly) return;
     const cur = chunks.find(c => c.id === id);
     setChunks(chunks.filter(c => c.id !== id));
     onChunkChanged?.({
@@ -208,6 +210,7 @@ export default function ScheduleCalendar({ runId, orders, chunks, initialChunks,
     });
   };
   const addChunk    = (order_id, line, date, qty) => {
+    if (viewOnly) return;
     const o = orders.find(x => x.order_id === order_id);
     if (!o) return;
     const nc = {
@@ -230,6 +233,7 @@ export default function ScheduleCalendar({ runId, orders, chunks, initialChunks,
     });
   };
   const updateChunk = (id, qty, sizes) => {
+    if (viewOnly) return;
     if (qty <= 0) { deleteChunk(id); return; }
     const cur = chunks.find(c => c.id === id);
     setChunks(chunks.map(c => c.id === id ? { ...c, qty, ...(sizes != null && { sizes }) } : c));
@@ -432,25 +436,28 @@ export default function ScheduleCalendar({ runId, orders, chunks, initialChunks,
                         className={`border-r border-b border-gray-100 align-top p-1 transition-colors
                           ${wknd ? "bg-slate-50" : cs.length === 0 ? "bg-white hover:bg-blue-50/20" : bg || "bg-white"}`}
                         style={{ minWidth: 112, verticalAlign: "top" }}
-                        onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add("ring-2", "ring-blue-400", "ring-inset"); }}
+                        onDragOver={e => { if (viewOnly) return; e.preventDefault(); e.currentTarget.classList.add("ring-2", "ring-blue-400", "ring-inset"); }}
                         onDragLeave={e => {
+                          if (viewOnly) return;
                           if (!e.currentTarget.contains(e.relatedTarget))
                             e.currentTarget.classList.remove("ring-2", "ring-blue-400", "ring-inset");
                         }}
                         onDrop={e => {
+                          if (viewOnly) return;
                           e.preventDefault();
                           e.currentTarget.classList.remove("ring-2", "ring-blue-400", "ring-inset");
                           const id = dragId.current; dragId.current = null;
                           if (id) moveChunk(id, line, date);
                         }}
-                        onContextMenu={e => { e.preventDefault(); setAddCtx({ line, date, x: e.clientX, y: e.clientY }); }}>
+                        onContextMenu={e => { if (viewOnly) return; e.preventDefault(); setAddCtx({ line, date, x: e.clientX, y: e.clientY }); }}>
                         <div className="flex flex-col gap-0.5 min-h-5">
                           {cs.map(c => (
                             <OrderTag key={c.id} chunk={c} edited={!!edits[c.id]}
                               isLate={lateOrderIds.has(c.order_id)}
                               onDragStart={() => dragId.current = c.id}
                               onClick={() => setEditChunk(c)}
-                              onDelete={() => deleteChunk(c.id)} />
+                              onDelete={() => deleteChunk(c.id)}
+                              viewOnly={viewOnly} />
                           ))}
                         </div>
                         {act > 0 && (
@@ -518,7 +525,8 @@ export default function ScheduleCalendar({ runId, orders, chunks, initialChunks,
           edited={!!edits[editChunk.id]}
           onSave={(qty, sizes) => { updateChunk(editChunk.id, qty, sizes); setEditChunk(null); }}
           onDelete={() => { deleteChunk(editChunk.id); setEditChunk(null); }}
-          onClose={() => setEditChunk(null)} />
+          onClose={() => setEditChunk(null)}
+          viewOnly={viewOnly} />
       )}
     </div>
   );
@@ -528,7 +536,7 @@ export default function ScheduleCalendar({ runId, orders, chunks, initialChunks,
 
 const IS_GC_LINE = (line) => /^JAZ/i.test(line ?? "");
 
-function OrderTag({ chunk, edited, isLate, onDragStart, onClick, onDelete }) {
+function OrderTag({ chunk, edited, isLate, onDragStart, onClick, onDelete, viewOnly }) {
   const col      = chunk.color;
   const isGo     = chunk.stage === "GO" || chunk.stage === "A";
   const isSew    = chunk.stage === "SEW";
@@ -560,7 +568,7 @@ function OrderTag({ chunk, edited, isLate, onDragStart, onClick, onDelete }) {
     : chunk.qty.toLocaleString();
 
   return (
-    <div draggable
+    <div draggable={!viewOnly}
       className={`group flex rounded overflow-hidden cursor-grab select-none
         ${isLate  ? "ring-2 ring-red-500 ring-offset-0" : ""}
         ${edited && !isLate ? "ring-1 ring-amber-400" : ""}`}
@@ -570,8 +578,10 @@ function OrderTag({ chunk, edited, isLate, onDragStart, onClick, onDelete }) {
           ? "1.5px solid #ef4444"
           : `1px ${borderStyle} ${isGo ? "#fb923c" + borderAlpha : col + borderAlpha}`,
         opacity: noSize && isSew ? Math.min(chipOpacity, 0.85) : chipOpacity,
+        cursor: viewOnly ? "default" : "grab",
       }}
       onDragStart={e => {
+        if (viewOnly) { e.preventDefault(); return; }
         onDragStart();
         e.dataTransfer.effectAllowed = "move";
         try { e.dataTransfer.setData("text/plain", chunk.id); } catch (_) {}
@@ -602,11 +612,13 @@ function OrderTag({ chunk, edited, isLate, onDragStart, onClick, onDelete }) {
           {isGC             && <span className="text-[8px] font-bold text-purple-600 bg-purple-100 px-0.5 rounded leading-none">GC</span>}
           {noSize && isSew  && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="Chưa có size" />}
 
-          <button
-            className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500 leading-none font-bold text-[12px] shrink-0 pl-1"
-            onClick={e => { e.stopPropagation(); onDelete(); }}>
-            ×
-          </button>
+          {!viewOnly && (
+            <button
+              className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500 leading-none font-bold text-[12px] shrink-0 pl-1"
+              onClick={e => { e.stopPropagation(); onDelete(); }}>
+              ×
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -839,7 +851,7 @@ function ChunkSizeTable({ chunkSizes, orderSizes, chunkQty }) {
 
 // ─── ChunkEditDialog ──────────────────────────────────────────────────────────
 
-function ChunkEditDialog({ chunk, remainingForOrder, orderSizes, maxSizesForChunk, edited, onSave, onDelete, onClose }) {
+function ChunkEditDialog({ chunk, remainingForOrder, orderSizes, maxSizesForChunk, edited, onSave, onDelete, onClose, viewOnly }) {
   const [editing,    setEditing]    = useState(false);
   const [qty,        setQty]        = useState(chunk.qty);
   const [sizeInputs, setSizeInputs] = useState(() => {
@@ -974,17 +986,20 @@ function ChunkEditDialog({ chunk, remainingForOrder, orderSizes, maxSizesForChun
                               <input
                                 type="number" min={0} max={maxForSz}
                                 value={cur}
+                                disabled={viewOnly}
                                 onChange={e => handleSizeChange(sz, e.target.value)}
-                                className="w-20 text-right text-xs border border-gray-200 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                className="w-20 text-right text-xs border border-gray-200 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50"
                               />
                             </td>
                             <td className="px-3 py-1.5 text-right text-gray-400">{maxForSz.toLocaleString()}</td>
                             <td className="px-2 py-1.5 text-right">
-                              <button
-                                onClick={() => handleSizeChange(sz, String(maxForSz))}
-                                className="text-[10px] text-blue-600 hover:text-blue-800 font-medium px-1.5 py-0.5 rounded hover:bg-blue-50">
-                                Hết
-                              </button>
+                              {!viewOnly && (
+                                <button
+                                  onClick={() => handleSizeChange(sz, String(maxForSz))}
+                                  className="text-[10px] text-blue-600 hover:text-blue-800 font-medium px-1.5 py-0.5 rounded hover:bg-blue-50">
+                                  Hết
+                                </button>
+                              )}
                             </td>
                           </>
                         ) : (
@@ -1015,7 +1030,8 @@ function ChunkEditDialog({ chunk, remainingForOrder, orderSizes, maxSizesForChun
                 Số lượng (tối đa {maxQty.toLocaleString()}):
               </label>
               <input type="number" min={0} max={maxQty}
-                className="w-full text-center text-sm border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                disabled={viewOnly}
+                className="w-full text-center text-sm border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:bg-gray-50"
                 value={qty}
                 onChange={e => setQty(Math.min(maxQty, Math.max(0, parseInt(e.target.value || "0", 10))))} />
             </div>
@@ -1029,12 +1045,14 @@ function ChunkEditDialog({ chunk, remainingForOrder, orderSizes, maxSizesForChun
         </div>
 
         <div className="flex items-center gap-2 px-5 py-3 border-t border-gray-100 bg-gray-50">
-          <button onClick={onDelete}
-            className="text-xs text-red-600 hover:text-red-700 font-medium px-3 py-1.5 rounded-lg hover:bg-red-50 flex items-center gap-1">
-            <X size={11} /> Xóa khỏi lịch
-          </button>
+          {!viewOnly && (
+            <button onClick={onDelete}
+              className="text-xs text-red-600 hover:text-red-700 font-medium px-3 py-1.5 rounded-lg hover:bg-red-50 flex items-center gap-1">
+              <X size={11} /> Xóa khỏi lịch
+            </button>
+          )}
           <div className="flex-1" />
-          {!editing && (
+          {!viewOnly && !editing && (
             <button onClick={() => setEditing(true)}
               className="text-xs text-gray-700 border border-gray-200 px-3 py-1.5 rounded-lg bg-white hover:bg-gray-50">
               Chỉnh sửa
@@ -1050,7 +1068,7 @@ function ChunkEditDialog({ chunk, remainingForOrder, orderSizes, maxSizesForChun
             className="text-xs text-gray-700 border border-gray-200 px-3 py-1.5 rounded-lg bg-white hover:bg-gray-50">
             Đóng
           </button>
-          {editing && (
+          {editing && !viewOnly && (
             <button onClick={handleSave}
               className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700">
               Lưu thay đổi
