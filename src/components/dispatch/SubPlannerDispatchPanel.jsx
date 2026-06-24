@@ -301,8 +301,8 @@ function LineGroupCard({ group, color, dispatched, selected, onClick, mode }) {
         <span className="text-[10px] text-gray-500">{group.planners.length} thành viên</span>
       </div>
 
-      {/* Đơn chính / phụ counts */}
-      {dispatched && orders.length > 0 && (
+      {/* Đơn chính / phụ counts — chỉ hiện ở approval mode */}
+      {dispatched && orders.length > 0 && !isDateMode && (
         <div className="flex items-center gap-2 mb-2 mt-1">
           <span className="text-[10px] text-blue-600 font-semibold bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded">
             Chính: {mainOrds.length}
@@ -662,30 +662,11 @@ function DateEntryDetailPanel({ group, color, dispatched, step }) {
             <p className="text-sm">Không có đơn hàng phù hợp</p>
           </div>
         )}
-        {filtered.length > 0 && (() => {
-          const mainOrds = filtered.filter(o => !o.is_support);
-          const subOrds  = filtered.filter(o => o.is_support);
-          return (
-            <>
-              {mainOrds.length > 0 && (
-                <>
-                  <div className="px-4 pt-3 pb-1"><SectionDivider label="Đơn chính" count={mainOrds.length} sub={false} /></div>
-                  <div className="divide-y divide-gray-100">
-                    {mainOrds.map(o => <DateEntryOrderRow key={o.id} order={o} dateKey={dateKey} />)}
-                  </div>
-                </>
-              )}
-              {subOrds.length > 0 && (
-                <>
-                  <div className="px-4 pt-4 pb-1"><SectionDivider label="Đơn phụ (hỗ trợ chuyền khác)" count={subOrds.length} sub={true} /></div>
-                  <div className="divide-y divide-violet-50">
-                    {subOrds.map(o => <DateEntryOrderRow key={o.id} order={o} dateKey={dateKey} isSupport />)}
-                  </div>
-                </>
-              )}
-            </>
-          );
-        })()}
+        {filtered.length > 0 && (
+          <div className="divide-y divide-gray-100">
+            {filtered.map(o => <DateEntryOrderRow key={o.id} order={o} dateKey={dateKey} />)}
+          </div>
+        )}
       </div>
     </div>
   );
