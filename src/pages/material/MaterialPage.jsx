@@ -215,10 +215,10 @@ export default function MaterialPage() {
       <FilterBar>
         {/* Search */}
         <Input
-          placeholder="Tìm đơn hàng, article, chuyền..."
+          placeholder="Tìm đơn hàng, article..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-52 text-sm"
+          className="w-40 text-sm"
         />
 
         {/* Status filter pills */}

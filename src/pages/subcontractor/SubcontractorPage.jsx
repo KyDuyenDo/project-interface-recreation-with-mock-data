@@ -481,10 +481,10 @@ export default function SubcontractorPage() {
 
       <FilterBar>
         <Input
-          placeholder="Tìm mã đơn, dạng giày, đơn vị GC..."
+          placeholder="Tìm mã đơn, dạng giày..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-56 text-sm"
+          className="w-40 text-sm"
         />
 
         {/* Status pills */}
