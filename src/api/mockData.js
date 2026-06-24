@@ -101,14 +101,15 @@ export const RUNS = [
     label: "run_20260622_verify", lifecycle_status: "accepted", status: "done",
     is_accepted: true, accepted_at: addDays(TODAY, -1).toISOString(), accepted_by: "le.an",
     period_id: 2, period_label: "Tháng 6/2026", on_time_pct: 94,
+    wizard_step: 5,
   }),
-  makeRun(46, { label: "run_20260621_a3", lifecycle_status: "draft", status: "done", on_time_pct: 91 }),
-  makeRun(45, { label: "run_20260621_a2", lifecycle_status: "draft", status: "done", on_time_pct: 88 }),
+  makeRun(46, { label: "run_20260621_a3", lifecycle_status: "draft", status: "done", on_time_pct: 91, wizard_step: 5 }),
+  makeRun(45, { label: "run_20260621_a2", lifecycle_status: "draft", status: "done", on_time_pct: 88, wizard_step: 5 }),
   makeRun(44, {
-    label: "run_20260620_run", status: "running", lifecycle_status: "draft",
-    generation: 210, fitness: null, on_time_pct: null, scheduled_count: null,
-    step_progress: 3, step_name: "TailFollowAllocator",
-    wizard_step: 1, // step 2: Ưu tiên & Chuyền
+    label: "run_20260620_run", status: "done", lifecycle_status: "draft",
+    generation: 380, fitness: 912000, on_time_pct: 94, scheduled_count: 25, n_orders: 25,
+    step_progress: 6, step_name: "Lưu kết quả",
+    wizard_step: 5, // step 6: Chỉnh sửa lịch
   }),
   makeRun(43, {
     label: "run_20260620_fail", status: "failed", lifecycle_status: "draft",
@@ -830,8 +831,12 @@ export let MOCK_TASK_ASSIGNMENTS = (() => {
   const RUN_META = {
     48: { run_id: 48, run_label: "run_20260622_active", period_label: "Tháng 6/2026",
           started_at: addDays(TODAY, -2).toISOString(), step_label: "Ưu tiên & Chuyền" },
-    47: { run_id: 47, run_label: "run_20260620_verify", period_label: "Tháng 6/2026",
+    47: { run_id: 47, run_label: "run_20260622_verify", period_label: "Tháng 6/2026",
           started_at: addDays(TODAY, -5).toISOString(), step_label: "Review lịch" },
+    46: { run_id: 46, run_label: "run_20260621_a3", period_label: "Tháng 6/2026",
+          started_at: addDays(TODAY, -3).toISOString(), step_label: "Review lịch" },
+    45: { run_id: 45, run_label: "run_20260621_a2", period_label: "Tháng 6/2026",
+          started_at: addDays(TODAY, -4).toISOString(), step_label: "Review lịch" },
     44: { run_id: 44, run_label: "run_20260620_run", period_label: "Tháng 6/2026",
           started_at: addDays(TODAY, -1).toISOString(), step_label: "Ưu tiên & Chuyền" },
   };
@@ -952,36 +957,38 @@ export let MOCK_TASK_ASSIGNMENTS = (() => {
   });
 
   // Step 6 tasks — schedule review (one task per line, not per order)
-  Object.values(MOCK_LINE_ASSIGNMENTS).forEach((la, i) => {
-    const prodStart = addDays(TODAY, ri(-10, 0));
-    const prodEnd   = addDays(TODAY, ri(15, 45));
-    tasks.push({
-      id: tasks.length + 1,
-      run_id: 47,
-      run_label: RUN_META[47].run_label,
-      period_label: RUN_META[47].period_label,
-      run_started_at: RUN_META[47].started_at,
-      step: 6,
-      step_label: "Review lịch",
-      planner_username: la.planner_username,
-      planner_name: la.planner_name,
-      line_id: la.line_id,
-      order_id: null,
-      article: null,
-      model: null,
-      customer: null,
-      qty: null,
-      crd: null,
-      prod_start: isoDate(prodStart),
-      prod_end:   isoDate(prodEnd),
-      is_support: false,
-      main_line_id: null,
-      status: "confirmed",
-      reject_reason: null,
-      qty_override: null,
-      confirmed_at: addDays(TODAY, -1).toISOString(),
-      note: null,
-      created_at: addDays(TODAY, -3).toISOString(),
+  [44, 45, 46, 47].forEach(runId => {
+    Object.values(MOCK_LINE_ASSIGNMENTS).forEach((la, i) => {
+      const prodStart = addDays(TODAY, ri(-10, 0));
+      const prodEnd   = addDays(TODAY, ri(15, 45));
+      tasks.push({
+        id: tasks.length + 1,
+        run_id: runId,
+        run_label: RUN_META[runId].run_label,
+        period_label: RUN_META[runId].period_label,
+        run_started_at: RUN_META[runId].started_at,
+        step: 6,
+        step_label: "Review lịch",
+        planner_username: la.planner_username,
+        planner_name: la.planner_name,
+        line_id: la.line_id,
+        order_id: null,
+        article: null,
+        model: null,
+        customer: null,
+        qty: null,
+        crd: null,
+        prod_start: isoDate(prodStart),
+        prod_end:   isoDate(prodEnd),
+        is_support: false,
+        main_line_id: null,
+        status: "confirmed",
+        reject_reason: null,
+        qty_override: null,
+        confirmed_at: addDays(TODAY, -1).toISOString(),
+        note: null,
+        created_at: addDays(TODAY, -3).toISOString(),
+      });
     });
   });
 

@@ -44,6 +44,7 @@ export default function Step4GCDates({
   onPrev,
   onNext,
   readOnly = false,
+  isSub = false,
 }) {
   const [showImport, setShowImport] = useState(false);
   const [search,     setSearch]     = useState("");
@@ -141,7 +142,7 @@ export default function Step4GCDates({
         {gcOrders.length === 0 ? (
           <div className="flex items-start gap-2 px-3 py-3 rounded-lg text-sm bg-amber-50 text-amber-800 border border-amber-100">
             <Info size={15} className="shrink-0 mt-0.5" />
-            Chưa có đơn gia công — vui lòng quay lại Bước 1 và chọn đơn GC.
+            {isSub ? "Không có đơn gia công." : "Chưa có đơn gia công — vui lòng quay lại Bước 1 và chọn đơn GC."}
           </div>
         ) : (
           <>

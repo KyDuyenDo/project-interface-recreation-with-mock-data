@@ -123,12 +123,13 @@ function SubPlannerDrawer({ open, onClose, dispatchStep, runId }) {
 }
 
 // ── Completed WizardStepper ────────────────────────────────────────────────────
-function CompletedStepper({ step, onGoStep, isStepLocked, rightSlot }) {
+function CompletedStepper({ step, onGoStep, isStepLocked, isSub, rightSlot }) {
   return (
     <div className="flex border-b border-gray-200 bg-white shrink-0 overflow-x-auto items-center">
       {STEPS.map((s, i) => {
         const isCurrent = i === step;
         const locked    = isStepLocked ? isStepLocked(i) : false;
+        const showAmber = isSub ? i === 0 : i < 4;
 
         return (
           <button
@@ -141,7 +142,7 @@ function CompletedStepper({ step, onGoStep, isStepLocked, rightSlot }) {
                 ? "border-blue-600 text-blue-700 bg-blue-50/50 cursor-pointer"
                 : locked
                   ? "border-transparent text-gray-300 cursor-not-allowed bg-gray-50/20"
-                  : i < 4
+                  : showAmber
                     ? "border-amber-300 text-amber-700 hover:bg-amber-50 cursor-pointer"
                     : "border-green-400 text-green-700 hover:bg-gray-50 cursor-pointer",
             ].join(" ")}
@@ -152,7 +153,7 @@ function CompletedStepper({ step, onGoStep, isStepLocked, rightSlot }) {
                 ? "bg-blue-600 text-white"
                 : locked
                   ? "bg-gray-150 text-gray-300"
-                  : i < 4
+                  : showAmber
                     ? "bg-amber-100 text-amber-700"
                     : "bg-green-500 text-white",
             ].join(" ")}>
@@ -160,7 +161,7 @@ function CompletedStepper({ step, onGoStep, isStepLocked, rightSlot }) {
                 ? i + 1
                 : locked
                   ? <Lock size={9} className="text-gray-400" />
-                  : i < 4
+                  : showAmber
                     ? <Eye size={10} />
                     : <Check size={12} />}
             </div>
@@ -478,6 +479,16 @@ export default function RunDetailPage() {
 
   const isStep2Dispatched = !!step2DispatchStatus?.dispatched;
 
+  // Sub-planner: query dispatch status for Step 6
+  const { data: step6DispatchStatus } = useQuery({
+    queryKey:  ["dispatch-status-step6", runId],
+    queryFn:   () => http.get(`/runs/${runId}/dispatch-status`, { params: { step: 6 } }).then(r => r.data),
+    enabled:   !!runId && isSub,
+    staleTime: 30_000,
+  });
+
+  const isStep6Dispatched = !!step6DispatchStatus?.dispatched;
+
   const isStepLocked = (idx) => {
     if (!isSub) return false;
     if (run?.lifecycle_status === "active") return false; // Active runs are finished and read-only, not locked.
@@ -501,7 +512,7 @@ export default function RunDetailPage() {
     }
     if (idx === 5) {
       // Step 6: Chỉnh sửa. Active when wizard_step >= 5.
-      return (run?.wizard_step ?? 0) < 5;
+      return (run?.wizard_step ?? 0) < 5 || !isStep6Dispatched;
     }
     return false;
   };
@@ -666,6 +677,8 @@ export default function RunDetailPage() {
       <CompletedStepper
         step={step}
         onGoStep={setStep}
+        isStepLocked={isStepLocked}
+        isSub={isSub}
         rightSlot={
           !isSub && DISPATCH_STEPS[step] ? (
             <SubPlannerTriggerBadge
@@ -776,6 +789,7 @@ export default function RunDetailPage() {
                     onPrev={() => setStep(2)}
                     onNext={() => setStep(4)}
                     readOnly={isSub ? (run?.lifecycle_status === "active" || (run?.wizard_step ?? 0) < 3) : true}
+                    isSub={isSub}
                   />
                 )}
               </>
@@ -807,7 +821,7 @@ export default function RunDetailPage() {
                 onNext={NOOP}
                 dispatchBlocked={false}
                 lineFilter={isSub && myLines.length > 0 ? myLines : null}
-                viewOnly={isSub ? (run?.lifecycle_status === "active" || (run?.wizard_step ?? 0) < 5) : false}
+                viewOnly={isSub ? (run?.lifecycle_status === "active" || (run?.wizard_step ?? 0) < 5 || !isStep6Dispatched) : false}
               />
             </div>
           )
