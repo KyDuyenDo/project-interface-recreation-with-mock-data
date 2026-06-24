@@ -87,50 +87,78 @@ function Stat({ label, value, color }) {
 // ── Mock order generator — approval mode ───────────────────────────────────────
 function mockApprovalOrders(username, lines, dispatched) {
   if (!dispatched) return [];
-  const statuses = ["confirmed", "rejected", "pending", "confirmed", "pending", "rejected", "confirmed", "pending"];
+  const statuses      = ["confirmed", "rejected", "pending", "confirmed", "pending", "rejected", "confirmed", "pending"];
   const confirmReasons = ["Đã kiểm tra, kế hoạch hợp lý.", "Chuyền đủ năng lực thực hiện.", "Nguyên liệu đã về đủ."];
   const rejectReasons  = ["Năng lực chuyền không đủ trong tuần này.", "NVL chưa về kịp deadline.", "Chuyền đang có lịch sản xuất khác."];
-  const count = 6 + (username.length % 5);
-  return Array.from({ length: count }, (_, i) => {
-    const line = lines[i % lines.length];
-    const st   = statuses[i % statuses.length];
-    const rs   = st === "confirmed" ? confirmReasons : st === "rejected" ? rejectReasons : [];
+  const mainCount    = 4 + (username.length % 4);   // 4-7 đơn chính
+  const supportCount = 1 + (username.length % 2);   // 1-2 đơn phụ
+  const total        = mainCount + supportCount;
+  return Array.from({ length: total }, (_, i) => {
+    const isSupport  = i >= mainCount;
+    const line       = isSupport ? lines[(lines.length > 1 ? 1 : 0)] : lines[i % lines.length];
+    const mainLineId = isSupport ? lines[0] : null;
+    const st         = statuses[i % statuses.length];
+    const rs         = st === "confirmed" ? confirmReasons : st === "rejected" ? rejectReasons : [];
     return {
-      id:        `ORD-${username.slice(0, 2).toUpperCase()}-${String(i + 1).padStart(3, "0")}`,
+      id:           `ORD-${username.slice(0, 2).toUpperCase()}-${String(i + 1).padStart(3, "0")}`,
       line,
-      san_luong: 200 + i * 150,
-      deadline:  `2026-07-${String((i % 28) + 1).padStart(2, "0")}`,
-      status:    st,
-      reason:    rs[i % rs.length] || "",
+      san_luong:    200 + i * 150,
+      deadline:     `2026-07-${String((i % 28) + 1).padStart(2, "0")}`,
+      status:       st,
+      reason:       rs[i % rs.length] || "",
+      is_support:   isSupport,
+      main_line_id: mainLineId,
     };
   });
 }
 
 // ── Mock order generator — date-entry mode (step 3 NVL / step 4 GC) ───────────
 function mockDateOrders(username, lines, step) {
-  const count = 6 + (username.length % 5);
-  // Deterministic "done" pattern: even-indexed orders have dates entered
-  const donePattern = [true, false, true, true, false, true, true, false, true, false, true];
-  return Array.from({ length: count }, (_, i) => {
-    const line    = lines[i % lines.length];
-    const isDone  = donePattern[i % donePattern.length];
-    const dateKey = step === 3 ? "nvl_date" : "gc_date";
-    const day     = String(10 + (i % 18)).padStart(2, "0");
+  const donePattern  = [true, false, true, true, false, true, true, false, true, false, true];
+  const mainCount    = 4 + (username.length % 4);
+  const supportCount = 1 + (username.length % 2);
+  const total        = mainCount + supportCount;
+  const dateKey      = step === 3 ? "nvl_date" : "gc_date";
+  return Array.from({ length: total }, (_, i) => {
+    const isSupport  = i >= mainCount;
+    const line       = isSupport ? lines[(lines.length > 1 ? 1 : 0)] : lines[i % lines.length];
+    const mainLineId = isSupport ? lines[0] : null;
+    const isDone     = donePattern[i % donePattern.length];
+    const day        = String(10 + (i % 18)).padStart(2, "0");
     return {
-      id:        `ORD-${username.slice(0, 2).toUpperCase()}-${String(i + 1).padStart(3, "0")}`,
+      id:           `ORD-${username.slice(0, 2).toUpperCase()}-${String(i + 1).padStart(3, "0")}`,
       line,
-      san_luong: 200 + i * 150,
-      deadline:  `2026-07-${String((i % 28) + 1).padStart(2, "0")}`,
-      status:    isDone ? "done" : "pending",
-      [dateKey]: isDone ? `2026-06-${day}` : null,
+      san_luong:    200 + i * 150,
+      deadline:     `2026-07-${String((i % 28) + 1).padStart(2, "0")}`,
+      status:       isDone ? "done" : "pending",
+      [dateKey]:    isDone ? `2026-06-${day}` : null,
+      is_support:   isSupport,
+      main_line_id: mainLineId,
     };
   });
 }
 
+// ── Section label (dùng trong cả card và panel chi tiết) ──────────────────────
+function SectionDivider({ label, count, sub }) {
+  return (
+    <div className={`flex items-center gap-2 px-1 ${sub ? "mt-3" : "mt-0"}`}>
+      <span className={`text-[10px] font-bold uppercase tracking-wider ${sub ? "text-violet-500" : "text-blue-500"}`}>
+        {label}
+      </span>
+      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${sub ? "bg-violet-100 text-violet-600" : "bg-blue-100 text-blue-600"}`}>
+        {count}
+      </span>
+      <div className={`flex-1 h-px ${sub ? "bg-violet-100" : "bg-blue-100"}`} />
+    </div>
+  );
+}
+
 // ── Left panel: planner card ───────────────────────────────────────────────────
 function PlannerCard({ planner, color, dispatched, selected, onClick, mode }) {
-  const orders = planner.orders || [];
-  const total  = orders.length;
+  const orders   = planner.orders || [];
+  const mainOrds = orders.filter(o => !o.is_support);
+  const subOrds  = orders.filter(o => o.is_support);
+  const total    = orders.length;
 
   // Approval mode stats
   const confirmed = orders.filter(o => o.status === "confirmed").length;
@@ -138,8 +166,8 @@ function PlannerCard({ planner, color, dispatched, selected, onClick, mode }) {
   const pending   = total - confirmed - rejected;
 
   // Date-entry mode stats
-  const done      = orders.filter(o => o.status === "done").length;
-  const notDone   = total - done;
+  const done    = orders.filter(o => o.status === "done").length;
+  const notDone = total - done;
 
   // Card-level status chip
   const cardStatus = mode === "approval"
@@ -175,26 +203,42 @@ function PlannerCard({ planner, color, dispatched, selected, onClick, mode }) {
             : <span className="text-[10px] text-amber-600 font-medium mt-0.5 block">Chờ phân công</span>
           }
 
-          {/* Lines */}
+          {/* Lines — chính + phụ */}
           <div className="flex flex-wrap gap-1 mt-2">
-            {(planner.lines || []).map(l => (
-              <span key={l} className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-gray-100 text-gray-600 border border-gray-200">{l}</span>
+            {(planner.lines || []).map((l, li) => (
+              <span key={l} className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold border ${
+                li === 0
+                  ? "bg-blue-50 text-blue-700 border-blue-200"
+                  : "bg-violet-50 text-violet-600 border-violet-200"
+              }`}>{l}</span>
             ))}
           </div>
 
+          {/* Đơn chính / phụ pill row */}
+          {dispatched && (
+            <div className="flex items-center gap-2 mt-1.5">
+              <span className="text-[10px] text-blue-600 font-semibold bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded">
+                Chính: {mainOrds.length}
+              </span>
+              <span className="text-[10px] text-violet-600 font-semibold bg-violet-50 border border-violet-100 px-1.5 py-0.5 rounded">
+                Phụ: {subOrds.length}
+              </span>
+            </div>
+          )}
+
           {/* Stats — only after dispatch */}
           {dispatched && (
-            <div className="flex items-center gap-3 mt-2.5 pt-2 border-t border-gray-100">
+            <div className="flex items-center gap-3 mt-2 pt-2 border-t border-gray-100">
               {mode === "approval" ? (
                 <>
-                  <Stat label="Tổng đơn"  value={total}     color="gray"  />
+                  <Stat label="Tổng"      value={total}     color="gray"  />
                   <Stat label="Chấp nhận" value={confirmed} color="green" />
                   <Stat label="Từ chối"   value={rejected}  color="red"   />
                   <Stat label="Chờ"       value={pending}   color="amber" />
                 </>
               ) : (
                 <>
-                  <Stat label="Tổng đơn"  value={total}  color="gray"  />
+                  <Stat label="Tổng"      value={total}  color="gray"  />
                   <Stat label="Đã nhập"   value={done}   color="green" />
                   <Stat label="Chưa nhập" value={notDone} color="amber" />
                 </>
@@ -300,34 +344,61 @@ function ApprovalDetailPanel({ planner, color, dispatched }) {
         <span className="ml-auto text-[11px] text-gray-400">{filtered.length} đơn hàng</span>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2">
+      <div className="flex-1 overflow-y-auto px-5 py-3">
         {filtered.length === 0 && (
           <div className="flex flex-col items-center py-12 gap-2 text-gray-400">
             <Package size={32} className="text-gray-200" />
             <p className="text-sm">Không có đơn hàng phù hợp</p>
           </div>
         )}
-        {filtered.map(order => <ApprovalOrderRow key={order.id} order={order} />)}
+        {filtered.length > 0 && (() => {
+          const mainOrds = filtered.filter(o => !o.is_support);
+          const subOrds  = filtered.filter(o => o.is_support);
+          return (
+            <div className="space-y-1.5">
+              {mainOrds.length > 0 && (
+                <>
+                  <SectionDivider label="Đơn chính" count={mainOrds.length} sub={false} />
+                  {mainOrds.map(o => <ApprovalOrderRow key={o.id} order={o} />)}
+                </>
+              )}
+              {subOrds.length > 0 && (
+                <>
+                  <SectionDivider label="Đơn phụ (hỗ trợ chuyền khác)" count={subOrds.length} sub={true} />
+                  {subOrds.map(o => <ApprovalOrderRow key={o.id} order={o} isSupport />)}
+                </>
+              )}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
 }
 
-function ApprovalOrderRow({ order }) {
+function ApprovalOrderRow({ order, isSupport = false }) {
   const [open, setOpen] = useState(false);
   const cfg = APPROVAL_STATUS[order.status] || APPROVAL_STATUS.pending;
   const hasReason = !!order.reason;
 
+  const borderCls = order.status === "rejected"
+    ? "border-red-200 bg-red-50/30"
+    : order.status === "confirmed"
+      ? isSupport ? "border-violet-200 bg-violet-50/20" : "border-green-200 bg-green-50/20"
+      : isSupport ? "border-violet-100 bg-violet-50/10" : "border-gray-200 bg-white";
+
   return (
-    <div className={`rounded-xl border overflow-hidden transition-all ${
-      order.status === "rejected"  ? "border-red-200   bg-red-50/30"   :
-      order.status === "confirmed" ? "border-green-200 bg-green-50/20" :
-                                     "border-gray-200  bg-white"
-    }`}>
+    <div className={`rounded-xl border overflow-hidden transition-all ${borderCls}`}>
       <button onClick={() => hasReason && setOpen(v => !v)} className={`w-full flex items-center gap-2 px-4 py-2.5 text-left ${hasReason ? "cursor-pointer" : "cursor-default"}`}>
         <span className={`w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />
         <span className="text-sm font-mono font-semibold text-gray-800 min-w-0 flex-1 truncate">{order.id}</span>
-        <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-gray-100 text-gray-600 border border-gray-200 shrink-0">{order.line}</span>
+        {/* Line badge — violet for support */}
+        <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold border shrink-0 ${
+          isSupport ? "bg-violet-50 text-violet-700 border-violet-200" : "bg-gray-100 text-gray-600 border-gray-200"
+        }`}>{order.line}</span>
+        {isSupport && order.main_line_id && (
+          <span className="text-[10px] text-violet-400 shrink-0">→ {order.main_line_id}</span>
+        )}
         <div className="hidden sm:flex items-center gap-1 text-xs text-gray-500 shrink-0">
           <Package size={11} className="text-gray-400" />
           <span>{order.san_luong.toLocaleString()}</span>
@@ -463,35 +534,67 @@ function DateEntryDetailPanel({ planner, color, dispatched, step }) {
         </div>
       </div>
 
-      {/* Order rows */}
-      <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
+      {/* Order rows — grouped chính / phụ */}
+      <div className="flex-1 overflow-y-auto">
         {filtered.length === 0 && (
           <div className="flex flex-col items-center py-12 gap-2 text-gray-400">
             <Package size={32} className="text-gray-200" />
             <p className="text-sm">Không có đơn hàng phù hợp</p>
           </div>
         )}
-        {filtered.map(order => (
-          <DateEntryOrderRow key={order.id} order={order} dateKey={dateKey} />
-        ))}
+        {filtered.length > 0 && (() => {
+          const mainOrds = filtered.filter(o => !o.is_support);
+          const subOrds  = filtered.filter(o => o.is_support);
+          return (
+            <>
+              {mainOrds.length > 0 && (
+                <>
+                  <div className="px-4 pt-3 pb-1">
+                    <SectionDivider label="Đơn chính" count={mainOrds.length} sub={false} />
+                  </div>
+                  <div className="divide-y divide-gray-100">
+                    {mainOrds.map(o => <DateEntryOrderRow key={o.id} order={o} dateKey={dateKey} />)}
+                  </div>
+                </>
+              )}
+              {subOrds.length > 0 && (
+                <>
+                  <div className="px-4 pt-4 pb-1">
+                    <SectionDivider label="Đơn phụ (hỗ trợ chuyền khác)" count={subOrds.length} sub={true} />
+                  </div>
+                  <div className="divide-y divide-violet-50">
+                    {subOrds.map(o => <DateEntryOrderRow key={o.id} order={o} dateKey={dateKey} isSupport />)}
+                  </div>
+                </>
+              )}
+            </>
+          );
+        })()}
       </div>
     </div>
   );
 }
 
-function DateEntryOrderRow({ order, dateKey }) {
+function DateEntryOrderRow({ order, dateKey, isSupport = false }) {
   const isDone = order.status === "done";
   const date   = order[dateKey];
 
+  const rowBg = isDone
+    ? isSupport ? "bg-violet-50/30 hover:bg-violet-50/50" : "bg-green-50/30 hover:bg-green-50/50"
+    : isSupport ? "bg-violet-50/10 hover:bg-violet-50/30" : "bg-white hover:bg-amber-50/30";
+
   return (
-    <div className={`flex items-center gap-2 px-4 py-3 transition-colors ${
-      isDone ? "bg-green-50/30 hover:bg-green-50/50" : "bg-white hover:bg-amber-50/30"
-    }`}>
+    <div className={`flex items-center gap-2 px-4 py-3 transition-colors ${rowBg}`}>
       <span className={`w-2 h-2 rounded-full shrink-0 ${isDone ? "bg-green-500" : "bg-amber-400"}`} />
       <span className="text-sm font-mono font-semibold text-gray-800 flex-1 truncate min-w-0">{order.id}</span>
-      <span className="w-14 shrink-0 text-center">
-        <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-gray-100 text-gray-600 border border-gray-200">{order.line}</span>
-      </span>
+      {/* Line badge */}
+      <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold border shrink-0 ${
+        isSupport ? "bg-violet-50 text-violet-700 border-violet-200" : "bg-gray-100 text-gray-600 border-gray-200"
+      }`}>{order.line}</span>
+      {/* Arrow showing which main line this supports */}
+      {isSupport && order.main_line_id && (
+        <span className="text-[10px] text-violet-400 shrink-0">→ {order.main_line_id}</span>
+      )}
       <span className="w-16 shrink-0 text-right text-xs text-gray-500 font-medium">
         {order.san_luong.toLocaleString()}
       </span>
@@ -499,7 +602,7 @@ function DateEntryOrderRow({ order, dateKey }) {
         {date ? (
           <span className="inline-flex items-center gap-1 text-xs text-green-700 font-semibold">
             <CalendarDays size={11} />
-            {date.slice(5)} {/* Show MM-DD */}
+            {date.slice(5)}
           </span>
         ) : (
           <span className="text-xs text-gray-300 italic">—</span>
