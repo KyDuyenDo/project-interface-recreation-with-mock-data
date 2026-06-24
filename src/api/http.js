@@ -458,7 +458,23 @@ function route(method, url, body, config) {
         });
         return ok({ dispatched: true, planners: Object.values(plannerMap) });
       }
-      return ok({ dispatched: false, planners: [] });
+      // 3. Fallback for new runs: auto-seed all planners as confirmed
+      const allPlannerMap = {};
+      Object.values(M.MOCK_LINE_ASSIGNMENTS).forEach(la => {
+        if (!la.planner_username) return;
+        if (!allPlannerMap[la.planner_username]) {
+          allPlannerMap[la.planner_username] = {
+            username:      la.planner_username,
+            name:          la.planner_name,
+            lines:         [],
+            status:        "confirmed",
+            updated_at:    new Date(Date.now() - 86400000).toISOString(),
+            reject_reason: null,
+          };
+        }
+        allPlannerMap[la.planner_username].lines.push(la.line_id);
+      });
+      return ok({ dispatched: true, planners: Object.values(allPlannerMap) });
     }
 
     if (p.length === 2) {
