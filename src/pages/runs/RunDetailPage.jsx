@@ -1,26 +1,23 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Download, Check, AlertTriangle, Loader2, CheckCircle, RefreshCw, X } from "lucide-react";
+import {
+  ArrowLeft, Download, Check, AlertTriangle, Loader2,
+  CheckCircle, RefreshCw, X, Eye,
+} from "lucide-react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import {
-  useRunDetail,
-  useRunStatus,
-  useRunWarnings,
-  useRunOutputOrders,
-  useVerifyRun,
-  usePublishLogs,
-  usePublishLogDetails,
-  useActiveRun,
+  useRunDetail, useRunStatus, useRunWarnings, useRunOutputOrders,
+  useVerifyRun, usePublishLogs, usePublishLogDetails, useActiveRun,
 } from "../../hooks";
 import { wizardStateApi } from "../../api";
 import { usePermissions } from "../../hooks/usePermissions";
-import StatusBadge    from "./components/StatusBadge";
+import StatusBadge     from "./components/StatusBadge";
 import AcceptRunDialog from "./components/AcceptRunDialog";
-import Step6Edit      from "../ga-config/steps/Step6Edit";
-import Step1Orders    from "../ga-config/steps/Step1Orders";
-import Step2Capacity  from "../ga-config/steps/Step2Capacity";
+import Step6Edit       from "../ga-config/steps/Step6Edit";
+import Step1Orders     from "../ga-config/steps/Step1Orders";
+import Step2Capacity   from "../ga-config/steps/Step2Capacity";
 import Step3MaterialETA from "../ga-config/steps/Step3MaterialETA";
-import Step4GCDates   from "../ga-config/steps/Step4GCDates";
+import Step4GCDates    from "../ga-config/steps/Step4GCDates";
 import RunHistoryDetailPage from "./RunHistoryDetailPage";
 
 const BTN = "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
@@ -30,35 +27,234 @@ const PIPELINE_STEPS = [
   "ILS Optimizer", "Phân bổ size", "Lưu kết quả",
 ];
 
-const WIZARD_TABS = ["orders", "capacity", "eta", "gcdates"];
+const STEPS = [
+  { key: "orders",   title: "Chọn đơn",   subtitle: "Nhập mã hoặc Excel" },
+  { key: "capacity", title: "Ưu tiên",    subtitle: "Chuyền theo model" },
+  { key: "mat",      title: "NVL về",     subtitle: "Ngày vật liệu" },
+  { key: "gc_dates", title: "Ngày GC",    subtitle: "Thu gia công" },
+  { key: "run",      title: "Chạy lịch",  subtitle: "TailFollow + ILS" },
+  { key: "edit",     title: "Chỉnh sửa",  subtitle: "Review + tinh chỉnh" },
+];
 
+const WIZARD_TABS = [0, 1, 2, 3]; // step indices that use wizard state
 const NOOP = () => {};
 
+// ── Completed WizardStepper ────────────────────────────────────────────────────
+function CompletedStepper({ step, onGoStep }) {
+  return (
+    <div className="flex border-b border-gray-200 bg-white shrink-0 overflow-x-auto items-center">
+      {STEPS.map((s, i) => {
+        const isCurrent   = i === step;
+        const isCompleted = i < step;
+        const isEditable  = i === 5; // step 6 is always editable
+
+        return (
+          <button
+            key={s.key}
+            onClick={() => onGoStep(i)}
+            className={[
+              "flex items-center gap-2 px-4 py-3 border-b-2 text-sm font-medium transition-colors min-w-0 whitespace-nowrap cursor-pointer",
+              isCurrent
+                ? "border-blue-600 text-blue-700 bg-blue-50/50"
+                : isEditable
+                  ? "border-green-400 text-green-700 hover:bg-gray-50"
+                  : isCompleted
+                    ? "border-amber-300 text-amber-700 hover:bg-amber-50"
+                    : "border-green-400 text-green-700 hover:bg-gray-50",
+            ].join(" ")}
+          >
+            <div className={[
+              "w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0",
+              isCurrent
+                ? "bg-blue-600 text-white"
+                : i < 4
+                  ? "bg-amber-100 text-amber-700"
+                  : "bg-green-500 text-white",
+            ].join(" ")}>
+              {isCurrent
+                ? i + 1
+                : i < 4
+                  ? <Eye size={10} />
+                  : <Check size={12} />}
+            </div>
+            <div className="text-left hidden sm:block">
+              <div className="text-xs font-medium leading-tight">{s.title}</div>
+              <div className="text-[10px] leading-tight opacity-60">{s.subtitle}</div>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Completed RunGA summary (step 5 view) ─────────────────────────────────────
+function CompletedRunView({ run, warnings, publishLogs, onShowLogDetails, onRetryVerification, onShowCompare, onAccept, isMain }) {
+  const liveStep   = run.step_progress ?? PIPELINE_STEPS.length;
+  const progressPct = run.status === "done" ? 100 : 0;
+
+  return (
+    <div className="absolute inset-0 overflow-auto p-5 bg-gray-50">
+      {/* KPI cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+        {[
+          { label: "Đơn đã lập", value: run.scheduled_count ?? "—", delta: "Hoàn thành", up: true },
+          { label: "On-time",    value: run.on_time_pct != null ? `${run.on_time_pct}%` : "—", delta: run.on_time_count != null ? `${run.on_time_count} đơn` : "", up: true },
+          { label: "Cảnh báo",  value: warnings.length, delta: warnings.length ? "Cần xem lại" : "Không có vấn đề", up: !warnings.length, danger: warnings.length > 0 },
+          { label: "Thời gian", value: run.runtime_seconds != null ? `${run.runtime_seconds.toFixed(1)}s` : "—", delta: "TailFollow + ILS", up: true },
+        ].map(({ label, value, delta, up, danger }) => (
+          <div key={label} className="bg-white rounded-xl border border-gray-200 p-4">
+            <div className="text-xs text-gray-500 uppercase tracking-wide">{label}</div>
+            <div className={`text-2xl font-bold mt-1 ${danger ? "text-red-600" : "text-gray-900"}`}>{value}</div>
+            {delta && (
+              <div className={`text-xs mt-1 flex items-center gap-1 ${up ? "text-green-600" : "text-red-500"}`}>
+                {up ? <Check size={11} /> : <AlertTriangle size={11} />} {delta}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Pipeline progress */}
+      <div className="bg-white rounded-xl border border-gray-200 mb-4">
+        <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-100">
+          <div className="text-sm font-semibold text-gray-900">Tiến trình pipeline</div>
+        </div>
+        <div className="p-5">
+          <div className="flex justify-between text-xs text-gray-500 mb-2">
+            <span>Lưu kết quả</span>
+            <span>{PIPELINE_STEPS.length}/{PIPELINE_STEPS.length}</span>
+          </div>
+          <div className="bg-gray-100 rounded-full overflow-hidden h-2 mb-4">
+            <div className="bg-blue-600 h-full rounded-full transition-all duration-500" style={{ width: `${progressPct}%` }} />
+          </div>
+          <div className="flex flex-col gap-2">
+            {PIPELINE_STEPS.map((label, i) => (
+              <div key={i} className="flex items-center gap-3 text-sm">
+                <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 bg-blue-600 text-white">✓</div>
+                <span className="text-gray-900">{label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Warnings inline */}
+      {warnings.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 mb-4">
+          <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-100">
+            <div className="text-sm font-semibold text-gray-900">Cảnh báo &amp; ERP drift</div>
+            <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">{warnings.length} mục</span>
+          </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                {["Loại", "Mức độ", "Mô tả", "Đơn hàng"].map(h => (
+                  <th key={h} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {warnings.map((w, i) => (
+                <tr key={i} className="border-b border-gray-50 last:border-0 hover:bg-gray-50">
+                  <td className="px-3 py-2 font-semibold text-sm">{w.kind}</td>
+                  <td className="px-3 py-2">
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium
+                      ${w.severity === "high" ? "bg-red-100 text-red-700" : w.severity === "medium" ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"}`}>
+                      <span className="w-1.5 h-1.5 rounded-full bg-current" />{w.severity}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-xs text-gray-600">{w.message}</td>
+                  <td className="px-3 py-2 text-xs font-mono text-gray-500">{w.order_id}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Verification logs */}
+      <div className="bg-white rounded-xl border border-gray-200 mb-4 overflow-hidden">
+        <div className="px-5 py-3 border-b border-gray-100 text-sm font-semibold text-gray-900 flex items-center justify-between">
+          <span>Lịch sử đối soát đồng bộ ERP</span>
+          <span className="text-xs text-gray-400 font-normal">Phiên gần nhất</span>
+        </div>
+        <div className="p-5">
+          {!publishLogs || publishLogs.length === 0 ? (
+            <p className="text-xs text-gray-400 italic">Chưa thực hiện phiên đối soát nào cho bản chạy này.</p>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {publishLogs.map(log => (
+                <div key={log.id} className="flex items-center justify-between text-sm p-3 bg-gray-50 rounded-lg border border-gray-100">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium text-gray-900 flex items-center gap-2">
+                      Phiên #{log.id}
+                      <span className="text-xs font-normal text-gray-500">({log.checked_at?.slice(0, 16).replace("T", " ")})</span>
+                    </span>
+                    <span className="text-xs text-gray-600 mt-1">Kết quả: {log.matched_count}/{log.total_records} đơn khớp</span>
+                    <span className="text-[11px] text-gray-500 italic mt-0.5">{log.verification_note}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <StatusBadge status={log.status} />
+                    {(log.status === "partial" || log.status === "not_found") && (
+                      <button
+                        className="px-2 py-1 text-xs bg-white hover:bg-gray-100 border border-gray-200 rounded text-gray-600"
+                        onClick={() => onShowLogDetails(log.id)}
+                      >Xem lỗi</button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Algorithm info */}
+      <div className="bg-white rounded-xl border border-gray-200 mb-4">
+        <div className="px-5 py-3 border-b border-gray-100 text-sm font-semibold text-gray-900">Thuật toán</div>
+        <div className="p-5">
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+            <dt className="text-gray-500">Phase 1</dt><dd className="text-gray-900">TailFollowAllocator — gán chuyền theo đuôi + cân bằng tải</dd>
+            <dt className="text-gray-500">Phase 2</dt><dd className="text-gray-900">ILS (SWAP / RELOCATE / REORDER) — thoát local optima</dd>
+            <dt className="text-gray-500">Phase 3</dt><dd className="text-gray-900">SizeSequencer — phân bổ size theo ngày (K/Q từ DE_ORDERM)</dd>
+            <dt className="text-gray-500">Fitness</dt><dd className="font-medium text-gray-900">{run.fitness != null ? run.fitness.toLocaleString() : "—"}</dd>
+          </dl>
+        </div>
+      </div>
+
+      {/* Thông số */}
+      <div className="bg-white rounded-xl border border-gray-200">
+        <div className="px-5 py-3 border-b border-gray-100 text-sm font-semibold text-gray-900">Thông số lập lịch</div>
+        <div className="p-5">
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+            <dt className="text-gray-500">Thuật toán</dt><dd className="text-gray-900">TailFollowAllocator + ILS</dd>
+            <dt className="text-gray-500">Horizon</dt><dd className="text-gray-900">{run.config_json?.horizon_days ?? 90} ngày</dd>
+            <dt className="text-gray-500">Cửa sổ năng lực</dt><dd className="text-gray-900">{run.config_json?.report_window_days ?? 90} ngày</dd>
+            <dt className="text-gray-500">Đơn đầu vào</dt><dd className="text-gray-900">{run.config_json?.order_ids ? `${run.config_json.order_ids.length} đơn (chọn thủ công)` : "Tất cả đơn NEW"}</dd>
+            <dt className="text-gray-500">Thời gian chạy</dt><dd className="text-gray-900">{run.runtime_seconds != null ? `${run.runtime_seconds.toFixed(1)}s` : "—"}</dd>
+            <dt className="text-gray-500">Tạo bởi</dt><dd className="text-gray-900">{run.triggered_by ?? "—"}</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main page ──────────────────────────────────────────────────────────────────
 export default function RunDetailPage() {
-  const { runId: runIdParam, tab: tabParam } = useParams();
+  const { runId: runIdParam } = useParams();
   const runId   = runIdParam ? parseInt(runIdParam, 10) : null;
   const navigate = useNavigate();
 
-  const validTabs = ["overview", "warnings", "orders", "capacity", "eta", "gcdates", "step6", "params"];
-  const [tab, setTabState] = useState(() => validTabs.includes(tabParam) ? tabParam : "overview");
+  // Wizard step: default to step 6 (index 5 = Chỉnh sửa)
+  const [step, setStep] = useState(5);
 
-  // Keep tab in sync when browser navigates (back/forward)
-  useEffect(() => {
-    if (tabParam && validTabs.includes(tabParam) && tabParam !== tab) {
-      setTabState(tabParam);
-    }
-  }, [tabParam]);
-
-  const setTab = (newTab) => {
-    setTabState(newTab);
-    navigate(`/runs/${runId}/${newTab}`, { replace: true });
-  };
-
-  const [acceptTarget,     setAcceptTarget]     = useState(null);
-  const [showCompare,      setShowCompare]       = useState(false);
-  const [activeLogId,      setActiveLogId]       = useState(null);
-  const [drawerOpen,       setDrawerOpen]        = useState(false);
-  const [showSuccessOverlay, setShowSuccessOverlay] = useState(false);
+  const [acceptTarget,       setAcceptTarget]       = useState(null);
+  const [showCompare,        setShowCompare]         = useState(false);
+  const [activeLogId,        setActiveLogId]         = useState(null);
+  const [drawerOpen,         setDrawerOpen]          = useState(false);
+  const [showSuccessOverlay, setShowSuccessOverlay]  = useState(false);
 
   const queryClient = useQueryClient();
   const { data: activeRun } = useActiveRun();
@@ -72,22 +268,8 @@ export default function RunDetailPage() {
   const orders    = ordersData?.orders ?? ordersData?.items ?? [];
   const lateCount = useMemo(() => orders.filter(o => o.is_late || (o.crd && o.go_end > o.crd)).length, [orders]);
 
-  const availableTabs = useMemo(() => {
-    const base = [
-      { value: "overview",  label: "Tổng quan" },
-      { value: "warnings",  label: "Cảnh báo" },
-      { value: "orders",    label: "Đơn hàng" },
-      { value: "capacity",  label: "Năng lực" },
-      { value: "eta",       label: "NVL về" },
-      { value: "gcdates",   label: "Ngày GC" },
-    ];
-    if (run?.status !== "failed") base.push({ value: "step6", label: "Chỉnh sửa lịch" });
-    base.push({ value: "params", label: "Thông số" });
-    return base;
-  }, [run?.status]);
-
-  // ── Wizard data ────────────────────────────────────────────────────────────
-  const wizardEnabled = WIZARD_TABS.includes(tab) && !!runId;
+  // ── Wizard data (steps 1-4) ────────────────────────────────────────────────
+  const wizardEnabled = WIZARD_TABS.includes(step) && !!runId;
   const { data: wOrders,   isLoading: wOrdersLoading }   = useQuery({ queryKey: ["wiz-orders",   runId], queryFn: () => wizardStateApi.getOrders(runId),          enabled: wizardEnabled, staleTime: 60_000 });
   const { data: wPrio,     isLoading: wPrioLoading }     = useQuery({ queryKey: ["wiz-prio",     runId], queryFn: () => wizardStateApi.getPriorities(runId),      enabled: wizardEnabled, staleTime: 60_000 });
   const { data: wCap,      isLoading: wCapLoading }      = useQuery({ queryKey: ["wiz-cap",      runId], queryFn: () => wizardStateApi.getCapacities(runId),      enabled: wizardEnabled, staleTime: 60_000 });
@@ -96,23 +278,13 @@ export default function RunDetailPage() {
   const { data: wGcDates,  isLoading: wGcLoading }       = useQuery({ queryKey: ["wiz-gc",       runId], queryFn: () => wizardStateApi.getGcDates(runId),         enabled: wizardEnabled, staleTime: 60_000 });
   const wizardLoading = wOrdersLoading || wPrioLoading || wCapLoading || wNewModelLoading || wEtaLoading || wGcLoading;
 
-  // ── Derived step props ─────────────────────────────────────────────────────
-  const regularOrders  = useMemo(() => wOrders?.regular ?? [], [wOrders]);
-  const gcOrders       = useMemo(() => wOrders?.gc      ?? [], [wOrders]);
-
-  const selectedRegularIds = useMemo(
-    () => new Set((wOrders?.regular ?? []).map(o => o.order_id)),
-    [wOrders],
-  );
-  const selectedGcIds = useMemo(
-    () => new Set((wOrders?.gc ?? []).map(o => o.order_id)),
-    [wOrders],
-  );
-  const allSelectedIds = useMemo(
-    () => new Set([...selectedRegularIds, ...selectedGcIds]),
-    [selectedRegularIds, selectedGcIds],
-  );
-  const knownOrdersMap = useMemo(() => {
+  // ── Derived wizard props ───────────────────────────────────────────────────
+  const regularOrders     = useMemo(() => wOrders?.regular ?? [], [wOrders]);
+  const gcOrders          = useMemo(() => wOrders?.gc      ?? [], [wOrders]);
+  const selectedRegularIds = useMemo(() => new Set((wOrders?.regular ?? []).map(o => o.order_id)), [wOrders]);
+  const selectedGcIds      = useMemo(() => new Set((wOrders?.gc ?? []).map(o => o.order_id)), [wOrders]);
+  const allSelectedIds     = useMemo(() => new Set([...selectedRegularIds, ...selectedGcIds]), [selectedRegularIds, selectedGcIds]);
+  const knownOrdersMap     = useMemo(() => {
     const m = {};
     for (const o of [...regularOrders, ...gcOrders]) {
       if (!o.order_id) continue;
@@ -126,7 +298,6 @@ export default function RunDetailPage() {
     }
     return m;
   }, [regularOrders, gcOrders]);
-
   const priorityConfig     = useMemo(() => wPrio?.priority_config ?? {}, [wPrio]);
   const capChoices         = useMemo(() => wCap?.cap_choices ?? {}, [wCap]);
   const workingHoursPerDay = wCap?.working_hours_per_day ?? 8;
@@ -145,11 +316,7 @@ export default function RunDetailPage() {
         queryClient.invalidateQueries({ queryKey: ["run", runId] });
         refetchPublishLogs();
       }, 4000);
-      return () => {
-        clearInterval(id);
-        // Fetch once more so logs are fresh after verifying ends
-        refetchPublishLogs();
-      };
+      return () => { clearInterval(id); refetchPublishLogs(); };
     }
   }, [run?.lifecycle_status, runId, queryClient, refetchPublishLogs]);
 
@@ -161,12 +328,7 @@ export default function RunDetailPage() {
   }, [publishLogs, run?.lifecycle_status]);
 
   const { isMain } = usePermissions();
-
-  if (!run) return (
-    <div className="flex flex-col h-full items-center justify-center">
-      <Loader2 size={28} className="animate-spin text-blue-500" />
-    </div>
-  );
+  const isLocked   = run?.lifecycle_status === "verifying";
 
   const handleStartVerification = async () => {
     try {
@@ -176,12 +338,14 @@ export default function RunDetailPage() {
       console.error("Verification failed:", err);
     }
   };
-  const liveStep    = statusData?.current_step ?? run.step_progress ?? 0;
-  const liveStepName = statusData?.step_name ?? run.step_name ?? "—";
-  const progressPct  = statusData?.progress_pct ?? (run.status === "done" ? 100 : 0);
-  const isLocked     = run.lifecycle_status === "verifying";
 
-  const isWizardTab = WIZARD_TABS.includes(tab);
+  if (!run) return (
+    <div className="flex flex-col h-full items-center justify-center">
+      <Loader2 size={28} className="animate-spin text-blue-500" />
+    </div>
+  );
+
+  const isWizardStep = WIZARD_TABS.includes(step);
 
   return (
     <div className="flex flex-col h-full relative">
@@ -257,21 +421,8 @@ export default function RunDetailPage() {
         </button>
       </header>
 
-      {/* ── Tabs ───────────────────────────────────────────────────────────── */}
-      <div className="flex border-b border-gray-200 bg-white px-5 shrink-0">
-        {availableTabs.map(t => (
-          <button
-            key={t.value}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors
-              ${tab === t.value ? "border-blue-600 text-blue-700" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-            onClick={() => setTab(t.value)}>
-            {t.label}
-            {t.value === "warnings" && warnings.length > 0 && (
-              <span className="ml-1.5 inline-flex items-center justify-center px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-bold">{warnings.length}</span>
-            )}
-          </button>
-        ))}
-      </div>
+      {/* ── Completed wizard stepper (6 steps, no step 7) ──────────────────── */}
+      <CompletedStepper step={step} onGoStep={setStep} />
 
       {/* ── Content ────────────────────────────────────────────────────────── */}
       <div className="flex-1 min-h-0 relative bg-gray-50">
@@ -280,7 +431,7 @@ export default function RunDetailPage() {
         {isLocked && (
           <div className="absolute inset-0 bg-white/75 backdrop-blur-[1px] z-40 flex flex-col items-center justify-center gap-4">
             <div className="bg-white p-6 rounded-2xl shadow-xl border border-gray-100 flex flex-col items-center text-center max-w-sm">
-              <Loader2 size={40} className="animate-spin text-blue-600 mb-4 animate-duration-1000" />
+              <Loader2 size={40} className="animate-spin text-blue-600 mb-4" />
               <h3 className="font-bold text-gray-900 text-lg mb-1">Đang tiến hành đối soát</h3>
               <p className="text-gray-500 text-xs mb-4">
                 Hệ thống đang tự động kiểm tra đối chiếu danh sách đơn hàng trong bản kế hoạch với dữ liệu thực tế trên ERP PDSCH...
@@ -292,8 +443,8 @@ export default function RunDetailPage() {
           </div>
         )}
 
-        {/* ── Wizard step tabs: use absolute inset layout matching GAConfigPage ── */}
-        {isWizardTab && (
+        {/* ── Steps 1-4: read-only wizard content ────────────────────────── */}
+        {isWizardStep && (
           <div className="absolute inset-0 p-5 overflow-hidden flex flex-col">
             {wizardLoading ? (
               <div className="flex-1 flex items-center justify-center">
@@ -302,18 +453,18 @@ export default function RunDetailPage() {
               </div>
             ) : (
               <>
-                {tab === "orders" && (
+                {step === 0 && (
                   <Step1Orders
                     regularOrders={regularOrders}
                     setRegularOrders={NOOP}
                     gcOrders={gcOrders}
                     setGcOrders={NOOP}
                     onPrev={NOOP}
-                    onNext={() => setTab("capacity")}
+                    onNext={() => setStep(1)}
                     readOnly
                   />
                 )}
-                {tab === "capacity" && (
+                {step === 1 && (
                   <Step2Capacity
                     selectedRegularIds={selectedRegularIds}
                     selectedGcIds={selectedGcIds}
@@ -327,28 +478,28 @@ export default function RunDetailPage() {
                     importedTargetQty={importedTargetQty}
                     onImportedTargetQtyChange={NOOP}
                     draftRunId={null}
-                    onPrev={() => setTab("orders")}
-                    onNext={() => setTab("eta")}
+                    onPrev={() => setStep(0)}
+                    onNext={() => setStep(2)}
                     readOnly
                   />
                 )}
-                {tab === "eta" && (
+                {step === 2 && (
                   <Step3MaterialETA
                     selectedIds={allSelectedIds}
                     materialEtaOverrides={materialEtaOvr}
                     setMaterialEtaOverrides={NOOP}
-                    onPrev={() => setTab("capacity")}
-                    onNext={() => setTab("gcdates")}
+                    onPrev={() => setStep(1)}
+                    onNext={() => setStep(3)}
                     readOnly
                   />
                 )}
-                {tab === "gcdates" && (
+                {step === 3 && (
                   <Step4GCDates
                     gcOrders={gcOrders}
                     gcDateOverrides={gcDateOvr}
                     setGcDateOverrides={NOOP}
-                    onPrev={() => setTab("eta")}
-                    onNext={NOOP}
+                    onPrev={() => setStep(2)}
+                    onNext={() => setStep(4)}
                     readOnly
                   />
                 )}
@@ -357,205 +508,27 @@ export default function RunDetailPage() {
           </div>
         )}
 
-        {/* ── Non-wizard tabs: scrollable with padding ─────────────────────── */}
-        {!isWizardTab && (
-          <div className="absolute inset-0 overflow-auto p-5">
+        {/* ── Step 5: completed RunGA summary ──────────────────────────────── */}
+        {step === 4 && (
+          <CompletedRunView
+            run={run}
+            warnings={warnings}
+            publishLogs={publishLogs}
+            onShowLogDetails={(id) => { setActiveLogId(id); setDrawerOpen(true); }}
+            onRetryVerification={handleStartVerification}
+            isMain={isMain}
+          />
+        )}
 
-            {tab === "overview" && (
-              <>
-                {publishLogs?.[0] && publishLogs[0].status !== "verifying" && publishLogs[0].status !== "success" && (
-                  <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4 flex items-start gap-3">
-                    <AlertTriangle className="text-red-500 shrink-0 mt-0.5" size={20} />
-                    <div className="flex-1">
-                      <h4 className="font-bold text-red-900 text-sm">Đối soát đồng bộ ERP không khớp</h4>
-                      <p className="text-xs text-red-700 mt-1">{publishLogs[0].verification_note}</p>
-                      <div className="flex gap-2 mt-3">
-                        <button
-                          className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold transition-colors"
-                          onClick={() => { setActiveLogId(publishLogs[0].id); setDrawerOpen(true); }}
-                        >
-                          Xem chi tiết đơn hàng thiếu
-                        </button>
-                        <button
-                          className="px-3 py-1.5 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1"
-                          onClick={handleStartVerification}
-                        >
-                          <RefreshCw size={11} /> Thử lại
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* KPI cards */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
-                  {[
-                    { label: "Đơn đã lập", value: run.scheduled_count ?? "—", delta: run.status === "done" ? "Hoàn thành" : "Đang chạy", up: true },
-                    { label: "On-time",    value: run.on_time_pct != null ? `${run.on_time_pct}%` : "—", delta: run.on_time_count != null ? `${run.on_time_count} đơn` : "", up: true },
-                    { label: "Cảnh báo",  value: warnings.length, delta: warnings.length ? "Cần xem lại" : "Không có vấn đề", up: !warnings.length, danger: warnings.length > 0 },
-                    { label: "Thời gian", value: run.runtime_seconds != null ? `${run.runtime_seconds.toFixed(1)}s` : "—", delta: "TailFollow + ILS", up: true },
-                  ].map(({ label, value, delta, up, danger }) => (
-                    <div key={label} className="bg-white rounded-xl border border-gray-200 p-4">
-                      <div className="text-xs text-gray-500 uppercase tracking-wide">{label}</div>
-                      <div className={`text-2xl font-bold mt-1 ${danger ? "text-red-600" : "text-gray-900"}`}>{value}</div>
-                      {delta && (
-                        <div className={`text-xs mt-1 flex items-center gap-1 ${up ? "text-green-600" : "text-red-500"}`}>
-                          {up ? <Check size={11} /> : <AlertTriangle size={11} />} {delta}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Pipeline progress */}
-                <div className="bg-white rounded-xl border border-gray-200 mb-4">
-                  <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-100">
-                    <div className="text-sm font-semibold text-gray-900">Tiến trình pipeline</div>
-                    {isLive && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 ml-auto">
-                        <Loader2 size={10} className="animate-spin" /> Đang chạy
-                      </span>
-                    )}
-                  </div>
-                  <div className="p-5">
-                    <div className="flex justify-between text-xs text-gray-500 mb-2">
-                      <span>{liveStepName}</span>
-                      <span>{liveStep}/{PIPELINE_STEPS.length}</span>
-                    </div>
-                    <div className="bg-gray-100 rounded-full overflow-hidden h-2 mb-4">
-                      <div className="bg-blue-600 h-full rounded-full transition-all duration-500" style={{ width: `${Math.round(progressPct)}%` }} />
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      {PIPELINE_STEPS.map((label, i) => (
-                        <div key={i} className="flex items-center gap-3 text-sm">
-                          <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0
-                            ${i < liveStep ? "bg-blue-600 text-white" : i === liveStep && isLive ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-400"}`}>
-                            {i < liveStep ? "✓" : i + 1}
-                          </div>
-                          <span className={i < liveStep ? "text-gray-900" : "text-gray-400"}>{label}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Verification logs */}
-                <div className="bg-white rounded-xl border border-gray-200 mb-4 overflow-hidden">
-                  <div className="px-5 py-3 border-b border-gray-100 text-sm font-semibold text-gray-900 flex items-center justify-between">
-                    <span>Lịch sử đối soát đồng bộ ERP</span>
-                    <span className="text-xs text-gray-400 font-normal">Phiên gần nhất</span>
-                  </div>
-                  <div className="p-5">
-                    {!publishLogs || publishLogs.length === 0 ? (
-                      <p className="text-xs text-gray-400 italic">Chưa thực hiện phiên đối soát nào cho bản chạy này.</p>
-                    ) : (
-                      <div className="flex flex-col gap-3">
-                        {publishLogs.map(log => (
-                          <div key={log.id} className="flex items-center justify-between text-sm p-3 bg-gray-50 rounded-lg border border-gray-100">
-                            <div className="flex flex-col gap-0.5">
-                              <span className="font-medium text-gray-900 flex items-center gap-2">
-                                Phiên #{log.id}
-                                <span className="text-xs font-normal text-gray-500">({log.checked_at?.slice(0, 16).replace("T", " ")})</span>
-                              </span>
-                              <span className="text-xs text-gray-600 mt-1">Kết quả: {log.matched_count}/{log.total_records} đơn khớp</span>
-                              <span className="text-[11px] text-gray-500 italic mt-0.5">{log.verification_note}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <StatusBadge status={log.status} />
-                              {(log.status === "partial" || log.status === "not_found") && (
-                                <button
-                                  className="px-2 py-1 text-xs bg-white hover:bg-gray-100 border border-gray-200 rounded text-gray-600"
-                                  onClick={() => { setActiveLogId(log.id); setDrawerOpen(true); }}
-                                >
-                                  Xem lỗi
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Algorithm info */}
-                <div className="bg-white rounded-xl border border-gray-200">
-                  <div className="px-5 py-3 border-b border-gray-100 text-sm font-semibold text-gray-900">Thuật toán</div>
-                  <div className="p-5">
-                    <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-                      <dt className="text-gray-500">Phase 1</dt><dd className="text-gray-900">TailFollowAllocator — gán chuyền theo đuôi + cân bằng tải</dd>
-                      <dt className="text-gray-500">Phase 2</dt><dd className="text-gray-900">ILS (SWAP / RELOCATE / REORDER) — thoát local optima</dd>
-                      <dt className="text-gray-500">Phase 3</dt><dd className="text-gray-900">SizeSequencer — phân bổ size theo ngày (K/Q từ DE_ORDERM)</dd>
-                      <dt className="text-gray-500">Fitness</dt><dd className="font-medium text-gray-900">{run.fitness != null ? run.fitness.toLocaleString() : "—"}</dd>
-                    </dl>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {tab === "warnings" && (
-              <div className="bg-white rounded-xl border border-gray-200">
-                <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-100">
-                  <div className="text-sm font-semibold text-gray-900">Cảnh báo &amp; ERP drift</div>
-                  <div className="flex-1" />
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">{warnings.length} mục</span>
-                </div>
-                {warnings.length === 0 ? (
-                  <div className="py-12 text-center text-gray-400">
-                    <Check size={28} className="mx-auto mb-2 text-green-500" />
-                    <div className="font-semibold text-gray-600">Không có cảnh báo.</div>
-                  </div>
-                ) : (
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-gray-50 border-b border-gray-200">
-                        {["Loại", "Mức độ", "Mô tả", "Đơn hàng"].map(h => (
-                          <th key={h} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {warnings.map((w, i) => (
-                        <tr key={i} className="border-b border-gray-50 last:border-0 hover:bg-gray-50">
-                          <td className="px-3 py-2 font-semibold text-sm">{w.kind}</td>
-                          <td className="px-3 py-2">
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium
-                              ${w.severity === "high" ? "bg-red-100 text-red-700" : w.severity === "medium" ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"}`}>
-                              <span className="w-1.5 h-1.5 rounded-full bg-current" />{w.severity}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 text-xs text-gray-600">{w.message}</td>
-                          <td className="px-3 py-2 text-xs font-mono text-gray-500">{w.order_id}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            )}
-
-            {tab === "step6" && (
-              <div className="h-full min-h-0">
-                <Step6Edit runId={runId} />
-              </div>
-            )}
-
-            {tab === "params" && (
-              <div className="bg-white rounded-xl border border-gray-200 max-w-2xl">
-                <div className="px-5 py-3 border-b border-gray-100 text-sm font-semibold text-gray-900">Thông số lập lịch</div>
-                <div className="p-5">
-                  <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-                    <dt className="text-gray-500">Thuật toán</dt><dd className="text-gray-900">TailFollowAllocator + ILS</dd>
-                    <dt className="text-gray-500">Horizon</dt><dd className="text-gray-900">{run.config_json?.horizon_days ?? 90} ngày</dd>
-                    <dt className="text-gray-500">Cửa sổ năng lực</dt><dd className="text-gray-900">{run.config_json?.report_window_days ?? 90} ngày</dd>
-                    <dt className="text-gray-500">Đơn đầu vào</dt><dd className="text-gray-900">{run.config_json?.order_ids ? `${run.config_json.order_ids.length} đơn (chọn thủ công)` : "Tất cả đơn NEW"}</dd>
-                    <dt className="text-gray-500">Thời gian chạy</dt><dd className="text-gray-900">{run.runtime_seconds != null ? `${run.runtime_seconds.toFixed(1)}s` : "—"}</dd>
-                    <dt className="text-gray-500">Tạo bởi</dt><dd className="text-gray-900">{run.triggered_by ?? "—"}</dd>
-                  </dl>
-                </div>
-              </div>
-            )}
-
+        {/* ── Step 6: editable Chỉnh sửa lịch ─────────────────────────────── */}
+        {step === 5 && (
+          <div className="absolute inset-0 p-5 overflow-hidden flex flex-col">
+            <Step6Edit
+              runId={runId}
+              onPrev={() => setStep(4)}
+              onNext={NOOP}
+              dispatchBlocked={false}
+            />
           </div>
         )}
       </div>
@@ -652,7 +625,6 @@ export default function RunDetailPage() {
         />
       )}
 
-      {/* ── Inline compare view ─────────────────────────────────────────────── */}
       {showCompare && (
         <div className="fixed inset-0 z-50 bg-slate-50 flex flex-col">
           <RunHistoryDetailPage
