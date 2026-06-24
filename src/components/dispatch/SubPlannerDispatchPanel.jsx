@@ -218,21 +218,21 @@ function mockGroupDateOrders(group, step) {
 
   let orders = [];
   planners.forEach((planner, pi) => {
+    // Bước 3 & 4: chỉ nhập ngày cho đơn chính (không có đơn phụ)
     const count = 3 + (planner.username.length % 3);
     for (let i = 0; i < count; i++) {
-      const isSupport = pi > 0 && i === count - 1;
-      const line      = isSupport ? lines[0] : lines[(pi + i) % lines.length];
-      const isDone    = DONE_PATTERN[(pi * 5 + i) % DONE_PATTERN.length];
-      const day       = String(10 + ((pi * 5 + i) % 18)).padStart(2, "0");
+      const line   = lines[(pi + i) % lines.length];
+      const isDone = DONE_PATTERN[(pi * 5 + i) % DONE_PATTERN.length];
+      const day    = String(10 + ((pi * 5 + i) % 18)).padStart(2, "0");
       orders.push({
-        id:           `ORD-${group.groupId}-${planner.username.slice(-2).toUpperCase()}${String(i + 1).padStart(2, "0")}`,
+        id:        `ORD-${group.groupId}-${planner.username.slice(-2).toUpperCase()}${String(i + 1).padStart(2, "0")}`,
         line,
-        san_luong:    200 + (pi * 10 + i) * 120,
-        deadline:     `2026-07-${String(((pi * 5 + i) % 28) + 1).padStart(2, "0")}`,
-        status:       isDone ? "done" : "pending",
-        [dateKey]:    isDone ? `2026-06-${day}` : null,
-        is_support:   isSupport,
-        main_line_id: isSupport ? lines[0] : null,
+        san_luong: 200 + (pi * 10 + i) * 120,
+        deadline:  `2026-07-${String(((pi * 5 + i) % 28) + 1).padStart(2, "0")}`,
+        status:    isDone ? "done" : "pending",
+        [dateKey]: isDone ? `2026-06-${day}` : null,
+        is_support:   false,
+        main_line_id: null,
         updatedBy:    isDone ? planner : null,
       });
     }
