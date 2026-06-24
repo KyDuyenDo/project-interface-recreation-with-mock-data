@@ -181,7 +181,7 @@ function UpdateModal({ item, onClose, onSave }) {
               />
               {mode === "extend" && (
                 <p className="mt-1 text-xs text-amber-600">
-                  Gia hạn lần {(item.extension_count || 0) + 1} — cần được Main Planner xem xét.
+                  Gia hạn lần {(item.extension_count || 0) + 1} — đơn vị GC <strong>{item.gc_unit}</strong> xin thêm thời gian. Main Planner sẽ được thông báo.
                 </p>
               )}
             </div>
@@ -420,7 +420,7 @@ export default function SubcontractorPage() {
         title="Theo dõi Gia công (GC)"
         subtitle={
           isSubPlanner
-            ? `Chuyền của bạn: ${user?.assigned_lines?.join(", ") || "—"}`
+            ? `Chuyền gò phụ trách: ${user?.assigned_lines?.join(", ") || "—"} — cập nhật gia hạn khi đơn vị GC xin thêm thời gian`
             : "Tổng quan đơn gia công · theo dõi ngày trả hàng"
         }
       />
@@ -501,7 +501,7 @@ export default function SubcontractorPage() {
                       "Mã đơn", "Dạng giày", "SL", "Đơn vị GC",
                       "Ngày gửi GC", "Ngày XN trả", "CRD",
                       "Trạng thái", "Run", "Giai đoạn", "Ghi chú",
-                      ...(isSubPlanner ? ["Thao tác"] : []),
+                      ...(isSubPlanner ? ["Gia hạn / Xác nhận"] : []),
                     ].map((h) => (
                       <th key={h} className="border-b border-slate-200 px-4 py-3 text-left font-semibold whitespace-nowrap">
                         {h}
