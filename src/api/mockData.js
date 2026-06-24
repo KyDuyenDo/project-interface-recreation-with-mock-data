@@ -261,6 +261,71 @@ export const MATERIAL_ETAS = Array.from({ length: 22 }, (_, i) => {
   };
 });
 
+// ── Material Tracking (enriched view combining orders + ETAs + runs + lines) ──
+const _TRACKING_RUNS = [
+  { run_id: 48, run_label: "run_20260622_active", period_id: 2, period_label: "Tháng 6/2026", lifecycle_status: "active" },
+  { run_id: 47, run_label: "run_20260622_verify", period_id: 2, period_label: "Tháng 6/2026", lifecycle_status: "accepted" },
+  { run_id: 46, run_label: "run_20260621_a3",     period_id: 2, period_label: "Tháng 6/2026", lifecycle_status: "draft" },
+  { run_id: 41, run_label: "run_20260610_draft",  period_id: 1, period_label: "Tháng 5/2026", lifecycle_status: "draft" },
+];
+const _LINES_BY_PREFIX = {
+  B: ["B_L01", "B_L02", "B_L03", "B_L04"],
+  C: ["C_L01", "C_L02", "C_L03"],
+  A: ["A_L01", "A_L02"],
+  D: ["B_L01", "B_L02"],
+  E: ["A_L01", "A_L02"],
+};
+// ETA offsets relative to CRD (days): negative = before CRD = good, positive = after = late
+const _ETA_OFFSETS = [-15, 5, -7, 3, -3, 8, -10, -2, 15, -5];
+
+export const MATERIAL_TRACKING = _TRACKING_RUNS.flatMap((rc, ri_) =>
+  Array.from({ length: 10 }, (_, i) => {
+    const r = BAO_CAO_ALL[(ri_ * 47 + i * 13) % BAO_CAO_ALL.length];
+    const fprefix = r.ZLBH.slice(0, 1);
+    const lineArr = _LINES_BY_PREFIX[fprefix] || _LINES_BY_PREFIX.B;
+    const line_id = lineArr[i % lineArr.length];
+
+    const crdDate = new Date(r.CRD + "T00:00:00Z");
+    const etaOffset = _ETA_OFFSETS[(ri_ * 3 + i) % _ETA_OFFSETS.length];
+    const etaDate = new Date(crdDate);
+    etaDate.setUTCDate(etaDate.getUTCDate() + etaOffset);
+    const material_eta = isoDate(etaDate);
+
+    const daysToDeadline = (crdDate - TODAY) / 86400000;
+
+    let status;
+    if (etaDate > crdDate) {
+      status = "late";
+    } else if (etaDate <= TODAY) {
+      status = "ready";
+    } else if (daysToDeadline <= 7) {
+      status = "upcoming";
+    } else {
+      status = "waiting";
+    }
+
+    const lineAssignment = MOCK_LINE_ASSIGNMENTS[line_id];
+    return {
+      id: ri_ * 10 + i + 1,
+      order_id: r.RY,
+      article: r.Article,
+      shoe_type: r.XieMing,
+      deadline: r.CRD,
+      material_eta,
+      line_id,
+      status,
+      run_id: rc.run_id,
+      run_label: rc.run_label,
+      period_id: rc.period_id,
+      period_label: rc.period_label,
+      lifecycle_status: rc.lifecycle_status,
+      material_confirmed: status === "ready",
+      confirmed_at: status === "ready" ? isoDate(addDays(TODAY, -1)) : null,
+      confirmed_by: status === "ready" ? (lineAssignment?.planner_username || null) : null,
+    };
+  })
+);
+
 // ── Shoe model targets (Mục tiêu dạng giày) ──────────────────────────────────
 export let SHOE_TARGETS = MODELS.map((m, i) => ({
   id: i + 1,

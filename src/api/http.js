@@ -576,6 +576,34 @@ function route(method, url, body, config) {
   // ── Subcontractors ───────────────────────────────────────────────────────────
   if (p[0] === "subcontractors") return ok({ items: [] });
 
+  // ── Material Tracking ────────────────────────────────────────────────────────
+  if (p[0] === "material" && p[1] === "tracking") {
+    if (m === "PATCH" && p[2]) {
+      const id = parseInt(p[2]);
+      const item = M.MATERIAL_TRACKING.find((t) => t.id === id);
+      if (item) {
+        if (body?.material_confirmed !== undefined) item.material_confirmed = body.material_confirmed;
+        if (body?.material_eta) item.material_eta = body.material_eta;
+        if (body?.confirmed_by) item.confirmed_by = body.confirmed_by;
+        if (body?.material_confirmed) {
+          item.confirmed_at = new Date().toISOString();
+          item.status = "ready";
+        }
+      }
+      return ok({ ok: true, item });
+    }
+    let items = [...M.MATERIAL_TRACKING];
+    if (params.status) items = items.filter((t) => t.status === params.status);
+    if (params.run_id) items = items.filter((t) => t.run_id === parseInt(params.run_id));
+    if (params.line_ids) {
+      const lineSet = new Set(params.line_ids.split(","));
+      items = items.filter((t) => lineSet.has(t.line_id));
+    }
+    if (params.sort === "deadline_asc") items.sort((a, b) => a.deadline.localeCompare(b.deadline));
+    else if (params.sort === "deadline_desc") items.sort((a, b) => b.deadline.localeCompare(a.deadline));
+    return ok({ items, total: items.length });
+  }
+
   // ── Materials ──────────────────────────────────────────────────────────────
   if (p[0] === "materials") {
     if (p[2] === "import") return ok({ updated: 12, inserted: 4 });

@@ -118,6 +118,8 @@ export const materialApi = {
     }).then((r) => r.data);
   },
   update: (id, body) => http.put("/materials/etas", { order_id: id, ...body }).then((r) => r.data),
+  tracking: (params) => http.get("/material/tracking", { params }).then((r) => r.data),
+  patchTracking: (id, body) => http.patch(`/material/tracking/${id}`, body).then((r) => r.data),
 };
 
 // ─── New Models / Pins ───────────────────────────────────────────────────────

@@ -22,3 +22,17 @@ export const useUpdateMaterialETA = () => {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["material-eta"] }),
   });
 };
+
+export const useMaterialTracking = (params) =>
+  useQuery({
+    queryKey: ["material-tracking", params],
+    queryFn: () => materialApi.tracking(params),
+  });
+
+export const usePatchMaterialTracking = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }) => materialApi.patchTracking(id, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["material-tracking"] }),
+  });
+};
