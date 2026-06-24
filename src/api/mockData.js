@@ -360,6 +360,9 @@ export const GC_TRACKING = _GC_TRACKING_RUNS.flatMap((rc, ri_) =>
     const gcUnit = _GC_UNITS[(ri_ * 2 + i) % _GC_UNITS.length];
     const extension_count = (statusIdx === 3 && i > 5) ? 1 : 0;
     const extended_deadline = extension_count > 0 ? isoDate(addDays(rcDate, 5)) : null;
+    // Ngày gò: bắt đầu sau khi GC trả hàng, kết thúc sau vài ngày tùy SL
+    const go_start = isoDate(addDays(rcDate, 1 + (i % 3)));
+    const go_end   = isoDate(addDays(rcDate, 4 + (i % 4) * 2));
 
     let status, actual_return_date = null;
     if (statusIdx === 0)      { status = "received"; actual_return_date = isoDate(addDays(TODAY, -3)); }
@@ -382,6 +385,8 @@ export const GC_TRACKING = _GC_TRACKING_RUNS.flatMap((rc, ri_) =>
       extended_deadline,
       actual_return_date,
       extension_count,
+      go_start,
+      go_end,
       status,
       run_id: rc.run_id,
       run_label: rc.run_label,

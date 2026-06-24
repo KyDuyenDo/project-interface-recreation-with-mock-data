@@ -281,6 +281,18 @@ function GCRow({ item, isSubPlanner, onEdit }) {
         <div className="text-[10px] text-slate-400">{item.gc_dep_no}</div>
       </td>
 
+      {/* Chuyền gò */}
+      <td className="px-4 py-2.5">
+        <span className={clsx(
+          "inline-block rounded px-2 py-0.5 text-xs font-semibold",
+          item.line_id?.startsWith("A") ? "bg-violet-100 text-violet-700" :
+          item.line_id?.startsWith("B") ? "bg-blue-100 text-blue-700" :
+          "bg-teal-100 text-teal-700"
+        )}>
+          {item.line_id}
+        </span>
+      </td>
+
       {/* Ngày gửi GC */}
       <td className="px-4 py-2.5">
         <span className="font-mono text-xs text-slate-600">{fmtDate(item.sent_date)}</span>
@@ -301,6 +313,16 @@ function GCRow({ item, isSubPlanner, onEdit }) {
         )}>
           {rcDays < 0 ? `Trễ ${Math.abs(rcDays)} ngày` : rcDays === 0 ? "Hôm nay" : `Còn ${rcDays} ngày`}
         </div>
+      </td>
+
+      {/* Bắt đầu gò */}
+      <td className="px-4 py-2.5">
+        <span className="font-mono text-xs text-slate-600">{fmtDate(item.go_start)}</span>
+      </td>
+
+      {/* Kết thúc gò */}
+      <td className="px-4 py-2.5">
+        <span className="font-mono text-xs text-slate-600">{fmtDate(item.go_end)}</span>
       </td>
 
       {/* CRD */}
@@ -499,7 +521,8 @@ export default function SubcontractorPage() {
                   <tr>
                     {[
                       "Mã đơn", "Dạng giày", "SL", "Đơn vị GC",
-                      "Ngày gửi GC", "Ngày XN trả", "CRD",
+                      "Chuyền gò", "Ngày gửi GC", "Ngày XN trả",
+                      "Bắt đầu gò", "Kết thúc gò", "CRD",
                       "Trạng thái", "Run", "Giai đoạn", "Ghi chú",
                       ...(isSubPlanner ? ["Gia hạn / Xác nhận"] : []),
                     ].map((h) => (
@@ -512,7 +535,7 @@ export default function SubcontractorPage() {
                 <tbody>
                   {items.length === 0 ? (
                     <tr>
-                      <td colSpan={isSubPlanner ? 12 : 11} className="px-4 py-16 text-center">
+                      <td colSpan={isSubPlanner ? 15 : 14} className="px-4 py-16 text-center">
                         <div className="flex flex-col items-center gap-2 text-slate-400">
                           <Boxes size={32} strokeWidth={1.5} />
                           <p className="font-medium text-slate-500">Không có đơn gia công nào</p>
