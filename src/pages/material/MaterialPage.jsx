@@ -285,6 +285,7 @@ export default function MaterialPage() {
                     <th className="border-b border-slate-200 px-4 py-3 text-left font-semibold whitespace-nowrap">NVL dự kiến về</th>
                     <th className="border-b border-slate-200 px-4 py-3 text-left font-semibold whitespace-nowrap">Chuyền phụ trách</th>
                     <th className="border-b border-slate-200 px-4 py-3 text-left font-semibold whitespace-nowrap">Trạng thái</th>
+                    <th className="border-b border-slate-200 px-4 py-3 text-left font-semibold whitespace-nowrap">Cập nhật bởi</th>
                     <th className="border-b border-slate-200 px-4 py-3 text-left font-semibold whitespace-nowrap">Run</th>
                     <th className="border-b border-slate-200 px-4 py-3 text-left font-semibold whitespace-nowrap">Giai đoạn</th>
                     {isSubPlanner && (
@@ -295,7 +296,7 @@ export default function MaterialPage() {
                 <tbody>
                   {items.length === 0 ? (
                     <tr>
-                      <td colSpan={isSubPlanner ? 9 : 8} className="px-4 py-16 text-center">
+                      <td colSpan={isSubPlanner ? 10 : 9} className="px-4 py-16 text-center">
                         <div className="flex flex-col items-center gap-2 text-slate-400">
                           <Boxes size={32} strokeWidth={1.5} />
                           <p className="font-medium text-slate-500">Không có đơn nào</p>
@@ -363,21 +364,27 @@ function Row({ item, isSubPlanner, onConfirm, onEdit, isPending }) {
 
       <td className="px-4 py-2.5">
         <StatusPill status={item.status} />
-        {item.material_confirmed && item.confirmed_by && item.status === "ready" && (
-          <div className="mt-1.5 flex items-start gap-1.5 rounded-md bg-slate-50 border border-slate-200 px-2 py-1">
-            <span className="mt-px shrink-0 h-3.5 w-3.5 rounded-full bg-emerald-500 flex items-center justify-center text-[8px] text-white font-bold leading-none">
+      </td>
+
+      {/* Cập nhật bởi */}
+      <td className="px-4 py-2.5">
+        {item.confirmed_by ? (
+          <div className="flex items-start gap-1.5">
+            <span className="mt-0.5 shrink-0 h-5 w-5 rounded-full bg-emerald-500 flex items-center justify-center text-[9px] text-white font-bold leading-none">
               {item.confirmed_by.slice(0, 1).toUpperCase()}
             </span>
             <div className="min-w-0">
-              <div className="text-[10px] font-semibold text-slate-700 truncate">{item.confirmed_by}</div>
-              <div className="text-[9px] text-slate-400 leading-tight">Xác nhận NVL về</div>
+              <div className="text-xs font-semibold text-slate-700 truncate">{item.confirmed_by}</div>
+              <div className="text-[10px] text-slate-500 leading-tight">Xác nhận NVL về</div>
               {item.confirmed_at && (
-                <div className="text-[9px] text-slate-400 leading-tight">
+                <div className="text-[10px] text-slate-400 leading-tight">
                   {new Date(item.confirmed_at).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
                 </div>
               )}
             </div>
           </div>
+        ) : (
+          <span className="text-xs text-slate-300">—</span>
         )}
       </td>
 
