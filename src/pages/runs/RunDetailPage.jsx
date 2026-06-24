@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Download, Check, AlertTriangle, Loader2,
-  CheckCircle, RefreshCw, X, Eye,
+  CheckCircle, RefreshCw, X, Eye, Users, CheckCircle2, PanelRightOpen,
 } from "lucide-react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import {
@@ -10,6 +10,7 @@ import {
   useVerifyRun, usePublishLogs, usePublishLogDetails, useActiveRun,
 } from "../../hooks";
 import { wizardStateApi } from "../../api";
+import http from "../../api/http";
 import { usePermissions } from "../../hooks/usePermissions";
 import StatusBadge     from "./components/StatusBadge";
 import AcceptRunDialog from "./components/AcceptRunDialog";
@@ -19,6 +20,7 @@ import Step2Capacity   from "../ga-config/steps/Step2Capacity";
 import Step3MaterialETA from "../ga-config/steps/Step3MaterialETA";
 import Step4GCDates    from "../ga-config/steps/Step4GCDates";
 import RunHistoryDetailPage from "./RunHistoryDetailPage";
+import SubPlannerDispatchPanel from "../../components/dispatch/SubPlannerDispatchPanel";
 
 const BTN = "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
 
@@ -39,14 +41,91 @@ const STEPS = [
 const WIZARD_TABS = [0, 1, 2, 3]; // step indices that use wizard state
 const NOOP = () => {};
 
+// wizard step index → dispatch step number (mirrors GAConfigPage)
+const DISPATCH_STEPS = { 1: 2, 2: 3, 3: 4, 5: 6 };
+
+// ── Sub-Planner badge (always visible) ────────────────────────────────────────
+function SubPlannerTriggerBadge({ dispatchStep, runId, onClick }) {
+  const { data: statusData } = useQuery({
+    queryKey:        ["dispatch-status", runId, dispatchStep],
+    queryFn:         () => http.get(`/runs/${runId}/dispatch-status`, { params: { step: dispatchStep } }).then(r => r.data),
+    enabled:         !!runId,
+    refetchInterval: 10000,
+  });
+
+  const dispatched     = statusData?.dispatched;
+  const planners       = statusData?.planners || [];
+  const confirmedCount = planners.filter(p => p.status === "confirmed").length;
+  const rejectedCount  = planners.filter(p => p.status === "rejected").length;
+  const total          = planners.length;
+  const allConfirmed   = total > 0 && confirmedCount === total;
+
+  const btnBase = "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors";
+  const btnStyle = allConfirmed
+    ? `${btnBase} bg-green-50 border-green-200 text-green-700 hover:bg-green-100`
+    : rejectedCount > 0
+      ? `${btnBase} bg-red-50 border-red-200 text-red-700 hover:bg-red-100`
+      : dispatched
+        ? `${btnBase} bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100`
+        : `${btnBase} bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100`;
+
+  return (
+    <button onClick={onClick} className={btnStyle}>
+      <Users size={12} />
+      Sub-Planner
+      {dispatched ? (
+        allConfirmed ? (
+          <span className="flex items-center gap-0.5 bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
+            <CheckCircle2 size={9} /> {total}/{total}
+          </span>
+        ) : rejectedCount > 0 ? (
+          <span className="flex items-center gap-0.5 bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
+            <AlertTriangle size={9} /> {rejectedCount}
+          </span>
+        ) : (
+          <span className="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
+            {confirmedCount}/{total}
+          </span>
+        )
+      ) : (
+        <span className="bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full text-[10px]">Chưa gửi</span>
+      )}
+      <PanelRightOpen size={12} className="opacity-50" />
+    </button>
+  );
+}
+
+// ── Sub-Planner slide-in drawer ───────────────────────────────────────────────
+function SubPlannerDrawer({ open, onClose, dispatchStep, runId }) {
+  if (!dispatchStep) return null;
+  return (
+    <>
+      {open && (
+        <div className="fixed inset-0 z-30 bg-black/20 backdrop-blur-[1px]" onClick={onClose} />
+      )}
+      <div className={`fixed top-0 right-0 h-full z-40 flex flex-col bg-white shadow-2xl border-l border-gray-200 transition-transform duration-300 ease-in-out ${open ? "translate-x-0" : "translate-x-full"}`}
+        style={{ width: "min(1080px, calc(100vw - 196px))" }}>
+        <div className="flex items-center gap-3 px-5 py-3.5 border-b bg-gray-50 shrink-0">
+          <Users size={15} className="text-gray-500" />
+          <span className="text-sm font-semibold text-gray-800 flex-1">Theo dõi Sub-Planner · Bước {dispatchStep}</span>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-200 transition-colors text-gray-500">
+            <X size={15} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-hidden flex flex-col">
+          <SubPlannerDispatchPanel runId={runId} dispatchStep={dispatchStep} readOnly={false} />
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ── Completed WizardStepper ────────────────────────────────────────────────────
-function CompletedStepper({ step, onGoStep }) {
+function CompletedStepper({ step, onGoStep, rightSlot }) {
   return (
     <div className="flex border-b border-gray-200 bg-white shrink-0 overflow-x-auto items-center">
       {STEPS.map((s, i) => {
-        const isCurrent   = i === step;
-        const isCompleted = i < step;
-        const isEditable  = i === 5; // step 6 is always editable
+        const isCurrent = i === step;
 
         return (
           <button
@@ -56,11 +135,9 @@ function CompletedStepper({ step, onGoStep }) {
               "flex items-center gap-2 px-4 py-3 border-b-2 text-sm font-medium transition-colors min-w-0 whitespace-nowrap cursor-pointer",
               isCurrent
                 ? "border-blue-600 text-blue-700 bg-blue-50/50"
-                : isEditable
-                  ? "border-green-400 text-green-700 hover:bg-gray-50"
-                  : isCompleted
-                    ? "border-amber-300 text-amber-700 hover:bg-amber-50"
-                    : "border-green-400 text-green-700 hover:bg-gray-50",
+                : i < 4
+                  ? "border-amber-300 text-amber-700 hover:bg-amber-50"
+                  : "border-green-400 text-green-700 hover:bg-gray-50",
             ].join(" ")}
           >
             <div className={[
@@ -84,6 +161,9 @@ function CompletedStepper({ step, onGoStep }) {
           </button>
         );
       })}
+      {rightSlot && (
+        <div className="ml-auto px-3 shrink-0">{rightSlot}</div>
+      )}
     </div>
   );
 }
@@ -249,6 +329,7 @@ export default function RunDetailPage() {
 
   // Wizard step: default to step 6 (index 5 = Chỉnh sửa)
   const [step, setStep] = useState(5);
+  const [subDrawerOpen,      setSubDrawerOpen]       = useState(false);
 
   const [acceptTarget,       setAcceptTarget]       = useState(null);
   const [showCompare,        setShowCompare]         = useState(false);
@@ -327,7 +408,7 @@ export default function RunDetailPage() {
     }
   }, [publishLogs, run?.lifecycle_status]);
 
-  const { isMain } = usePermissions();
+  const { isMain, isSub } = usePermissions();
   const isLocked   = run?.lifecycle_status === "verifying";
 
   const handleStartVerification = async () => {
@@ -422,7 +503,29 @@ export default function RunDetailPage() {
       </header>
 
       {/* ── Completed wizard stepper (6 steps, no step 7) ──────────────────── */}
-      <CompletedStepper step={step} onGoStep={setStep} />
+      <CompletedStepper
+        step={step}
+        onGoStep={setStep}
+        rightSlot={
+          !isSub && (
+            <SubPlannerTriggerBadge
+              dispatchStep={DISPATCH_STEPS[step] ?? 6}
+              runId={runId}
+              onClick={() => setSubDrawerOpen(true)}
+            />
+          )
+        }
+      />
+
+      {/* Sub-Planner slide-in drawer */}
+      {!isSub && (
+        <SubPlannerDrawer
+          open={subDrawerOpen}
+          onClose={() => setSubDrawerOpen(false)}
+          dispatchStep={DISPATCH_STEPS[step] ?? 6}
+          runId={runId}
+        />
+      )}
 
       {/* ── Content ────────────────────────────────────────────────────────── */}
       <div className="flex-1 min-h-0 relative bg-gray-50">
