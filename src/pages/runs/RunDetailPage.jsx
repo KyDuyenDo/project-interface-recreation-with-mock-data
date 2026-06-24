@@ -507,22 +507,22 @@ export default function RunDetailPage() {
         step={step}
         onGoStep={setStep}
         rightSlot={
-          !isSub && (
+          !isSub && DISPATCH_STEPS[step] ? (
             <SubPlannerTriggerBadge
-              dispatchStep={DISPATCH_STEPS[step] ?? 6}
+              dispatchStep={DISPATCH_STEPS[step]}
               runId={runId}
               onClick={() => setSubDrawerOpen(true)}
             />
-          )
+          ) : null
         }
       />
 
       {/* Sub-Planner slide-in drawer */}
-      {!isSub && (
+      {!isSub && DISPATCH_STEPS[step] && (
         <SubPlannerDrawer
           open={subDrawerOpen}
           onClose={() => setSubDrawerOpen(false)}
-          dispatchStep={DISPATCH_STEPS[step] ?? 6}
+          dispatchStep={DISPATCH_STEPS[step]}
           runId={runId}
         />
       )}
