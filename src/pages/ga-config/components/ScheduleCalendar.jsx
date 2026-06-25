@@ -294,7 +294,7 @@ export default function ScheduleCalendar({ runId, orders, chunks, initialChunks,
   }, [chunks]);
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col h-full min-h-0 gap-3">
       {/* Fallback / data-source banner */}
       {usingFallback && (
         <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs">
@@ -387,8 +387,7 @@ export default function ScheduleCalendar({ runId, orders, chunks, initialChunks,
         </div>
       ) : (
         <div ref={scrollRef}
-          className="overflow-auto border border-gray-200 rounded-lg"
-          style={{ maxHeight: "62vh" }}
+          className="flex-1 min-h-0 overflow-auto border border-gray-200 rounded-lg"
           onDragOver={onGridDragOver}>
           <table className="border-collapse" style={{ tableLayout: "fixed" }}>
             <thead>
