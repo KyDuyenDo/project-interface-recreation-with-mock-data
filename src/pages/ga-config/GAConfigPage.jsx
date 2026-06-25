@@ -1,13 +1,13 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { useQueryClient, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, X, Check, Lock, Eye, Loader2, Users, CheckCircle2, AlertTriangle, ChevronRight, PanelRightOpen } from "lucide-react";
-import { useRunStatus, useRunDetail } from "../../hooks/useRuns";
-import { wizardStateApi, runsApi } from "../../api";
-import { usePermissions } from "../../hooks/usePermissions";
-import SubPlannerDispatchPanel from "../../components/dispatch/SubPlannerDispatchPanel";
-import http from "../../api/http";
+import { Loader2, Eye } from "lucide-react";
 
+// ─── Custom Hook & Steps ─────────────────────────────────────────────────────
+import { useWizardState } from "./hooks/useWizardState";
+
+// ─── Components ──────────────────────────────────────────────────────────────
+import WizardStepper from "./components/WizardStepper";
+import GAConfigHeader from "./components/GAConfigHeader";
+import SubPlannerTriggerBadge from "../../components/dispatch/SubPlannerTriggerBadge";
+import SubPlannerDrawer from "../../components/dispatch/SubPlannerDrawer";
 
 import Step1Orders      from "./steps/Step1Orders";
 import Step2Capacity    from "./steps/Step2Capacity";
@@ -17,494 +17,25 @@ import Step5RunGA       from "./steps/Step5RunGA";
 import Step6Edit        from "./steps/Step6Edit";
 import Step7Confirm     from "./steps/Step7Confirm";
 
-// ─── Wizard metadata ──────────────────────────────────────────────────────────
-
-const STEPS = [
-  { key: "orders",   title: "Chọn đơn",   subtitle: "Nhập mã hoặc Excel" },
-  { key: "capacity", title: "Ưu tiên",    subtitle: "Chuyền theo model" },
-  { key: "mat",      title: "NVL về",     subtitle: "Ngày vật liệu" },
-  { key: "gc_dates", title: "Ngày GC",    subtitle: "Thu gia công" },
-  { key: "run",      title: "Chạy lịch",  subtitle: "TailFollow + ILS" },
-  { key: "edit",     title: "Chỉnh sửa",  subtitle: "Review + tinh chỉnh" },
-  { key: "confirm",  title: "Xác nhận",   subtitle: "Đẩy vào kế hoạch" },
-];
-
-// ─── Step indicator ───────────────────────────────────────────────────────────
-
-function WizardStepper({ step, completedUpTo, canNavigateTo, runStatus, gaHasRun, onGoStep, rightSlot }) {
-  // "locked" = truly inaccessible (GA running, or prerequisite not met)
-  // "readOnly" = accessible but content is view-only (GA completed, steps 0-3)
-  const isReadOnly = (i) => gaHasRun && i < 4;
-  const isLocked = (i) => {
-    if (runStatus === "running" && i < 4) return true;
-    return !canNavigateTo(i);
-  };
-
-  return (
-    <div className="flex border-b border-gray-200 bg-white shrink-0 overflow-x-auto items-center">
-      {STEPS.map((s, i) => {
-        const isCompleted = i <= completedUpTo;
-        const isCurrent   = i === step;
-        const locked      = isLocked(i);
-        const readOnly    = isReadOnly(i);
-
-        return (
-          <button
-            key={s.key}
-            disabled={locked}
-            onClick={() => !locked && onGoStep(i)}
-            className={[
-              "flex items-center gap-2 px-4 py-3 border-b-2 text-sm font-medium transition-colors min-w-0 whitespace-nowrap",
-              isCurrent
-                ? "border-blue-600 text-blue-700 bg-blue-50/50"
-                : readOnly
-                  ? "border-amber-300 text-amber-700 hover:bg-amber-50 cursor-pointer"
-                  : isCompleted && !locked
-                    ? "border-green-400 text-green-700 hover:bg-gray-50 cursor-pointer"
-                    : locked
-                      ? "border-transparent text-gray-300 cursor-not-allowed"
-                      : "border-transparent text-gray-400 cursor-not-allowed",
-            ].join(" ")}>
-            <div className={[
-              "w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0",
-              isCurrent
-                ? "bg-blue-600 text-white"
-                : readOnly
-                  ? "bg-amber-100 text-amber-700"
-                  : isCompleted
-                    ? "bg-green-500 text-white"
-                    : "bg-gray-100 text-gray-400",
-            ].join(" ")}>
-              {readOnly && !isCurrent ? <Eye size={10} /> : isCompleted && !isCurrent ? <Check size={12} /> : i + 1}
-            </div>
-            <div className="text-left hidden sm:block">
-              <div className="text-xs font-medium leading-tight">{s.title}</div>
-              <div className="text-[10px] leading-tight opacity-60">{s.subtitle}</div>
-            </div>
-          </button>
-        );
-      })}
-      {rightSlot && (
-        <div className="ml-auto px-3 shrink-0">{rightSlot}</div>
-      )}
-    </div>
-  );
-}
-
-// ─── Sub-Planner drawer trigger (badge shown in WizardStepper right slot) ─────
-function SubPlannerTriggerBadge({ dispatchStep, runId, onClick }) {
-  const TAB_COLOR = { 2: "blue", 3: "teal", 4: "orange", 6: "purple" };
-  const color = TAB_COLOR[dispatchStep] || "blue";
-
-  const { data: statusData } = useQuery({
-    queryKey:        ["dispatch-status", runId, dispatchStep],
-    queryFn:         () => http.get(`/runs/${runId}/dispatch-status`, { params: { step: dispatchStep } }).then(r => r.data),
-    enabled:         !!runId,
-    refetchInterval: 10000,
-  });
-
-  const dispatched     = statusData?.dispatched;
-  const planners       = statusData?.planners || [];
-  const confirmedCount = planners.filter(p => p.status === "confirmed").length;
-  const rejectedCount  = planners.filter(p => p.status === "rejected").length;
-  const total          = planners.length;
-  const allConfirmed   = total > 0 && confirmedCount === total;
-
-  const btnBase = "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors";
-  const btnStyle = allConfirmed
-    ? `${btnBase} bg-green-50 border-green-200 text-green-700 hover:bg-green-100`
-    : rejectedCount > 0
-      ? `${btnBase} bg-red-50 border-red-200 text-red-700 hover:bg-red-100`
-      : dispatched
-        ? `${btnBase} bg-${color}-50 border-${color}-200 text-${color}-700 hover:bg-${color}-100`
-        : `${btnBase} bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100`;
-
-  return (
-    <button onClick={onClick} className={btnStyle}>
-      <Users size={12} />
-      Sub-Planner
-      {dispatched ? (
-        allConfirmed ? (
-          <span className="flex items-center gap-0.5 bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
-            <CheckCircle2 size={9} /> {total}/{total}
-          </span>
-        ) : rejectedCount > 0 ? (
-          <span className="flex items-center gap-0.5 bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
-            <AlertTriangle size={9} /> {rejectedCount}
-          </span>
-        ) : (
-          <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
-            {confirmedCount}/{total}
-          </span>
-        )
-      ) : (
-        <span className="bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full text-[10px]">Chưa gửi</span>
-      )}
-      <PanelRightOpen size={12} className="opacity-50" />
-    </button>
-  );
-}
-
-// ─── Sub-Planner right drawer ─────────────────────────────────────────────────
-function SubPlannerDrawer({ open, onClose, dispatchStep, runId }) {
-  if (!dispatchStep) return null;
-  return (
-    <>
-      {/* Backdrop */}
-      {open && (
-        <div
-          className="fixed inset-0 z-30 bg-black/20 backdrop-blur-[1px] transition-opacity"
-          onClick={onClose}
-        />
-      )}
-      {/* Drawer panel */}
-      <div className={`fixed top-0 right-0 h-full z-40 flex flex-col bg-white shadow-2xl border-l border-gray-200 transition-transform duration-300 ease-in-out ${open ? "translate-x-0" : "translate-x-full"}`}
-        style={{ width: "min(1080px, calc(100vw - 196px))" }}>
-        {/* Drawer header */}
-        <div className="flex items-center gap-3 px-5 py-3.5 border-b bg-gray-50 shrink-0">
-          <Users size={15} className="text-gray-500" />
-          <span className="text-sm font-semibold text-gray-800 flex-1">Theo dõi Sub-Planner</span>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-gray-200 transition-colors text-gray-500"
-          >
-            <X size={15} />
-          </button>
-        </div>
-        {/* Drawer body */}
-        <div className="flex-1 overflow-hidden flex flex-col">
-          <SubPlannerDispatchPanel
-            runId={runId}
-            dispatchStep={dispatchStep}
-            readOnly={false}
-          />
-        </div>
-      </div>
-    </>
-  );
-}
-
-// ─── Main wizard ──────────────────────────────────────────────────────────────
+const DISPATCH_STEPS = { 1: 2, 2: 3, 3: 4, 5: 6 };
 
 export default function GAConfigPage() {
-  const navigate      = useNavigate();
-  const queryClient   = useQueryClient();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const { isSub } = usePermissions();
-  const resumeId = searchParams.get("resume") ? parseInt(searchParams.get("resume"), 10) : null;
+  const {
+    navigate, isSub, resumeId,
+    step, completedUpTo, label, setLabel,
+    regularOrders, setRegularOrders, gcOrders, setGcOrders,
+    excludeLines, materialEtaOverrides, setMaterialEtaOverrides,
+    gcDateOverrides, setGcDateOverrides, runId, setRunId, draftRunId,
+    priorityConfig, setPriorityConfig, workingHoursPerDay, setWorkingHoursPerDay,
+    capChoices, setCapChoices, importedTargetQty, setImportedTargetQty,
+    isLoadedFromServer, step2Loading, setStep2Loading,
+    drawerOpen, setDrawerOpen,
+    runStatus, gaHasRun, dispatchBlocked,
+    selectedRegularIds, selectedGcIds, allSelectedIds, knownOrdersMap,
+    canNavigateTo, canAdvanceFromCurrent,
+    handleNext, handlePrev, goStep, discardDraft, saveStepState,
+  } = useWizardState();
 
-  // Wizard state
-  const [step,                setStep]                = useState(() => {
-    const s = parseInt(searchParams.get("step"), 10);
-    return isNaN(s) ? 0 : Math.min(Math.max(s, 0), 6);
-  });
-  const [completedUpTo,       setCompletedUpTo]       = useState(-1);
-  const [label,               setLabel]               = useState("");
-
-  // Orders: two separate panels
-  const [regularOrders, setRegularOrders] = useState([]); // [{order_id, order:{...}}]
-  const [gcOrders,      setGcOrders]      = useState([]); // [{order_id, order:{...}}]
-
-  const [excludeLines] = useState(new Set());
-  const [materialEtaOverrides, setMaterialEtaOverrides] = useState({});
-  const [gcDateOverrides,      setGcDateOverrides]      = useState({});
-  const [runId,               setRunId]               = useState(null);
-  const [draftRunId,          setDraftRunId]          = useState(null);
-  const [priorityConfig,      setPriorityConfig]      = useState({});
-  const [workingHoursPerDay,  setWorkingHoursPerDay]  = useState(8);
-  const [capChoices,          setCapChoices]          = useState({ regular: {}, gc: {}, noHistRegular: {}, noHistGc: {} });
-  const [importedTargetQty,   setImportedTargetQty]   = useState({});
-
-  const [isLoadedFromServer, setIsLoadedFromServer] = useState(false);
-  const [step2Loading,       setStep2Loading]       = useState(false);
-
-  // Dispatch-capable steps: wizard index → dispatch step number
-  const DISPATCH_STEPS = { 1: 2, 2: 3, 3: 4, 5: 6 };
-  const [drawerOpen, setDrawerOpen] = useState(false);
-
-  // Close drawer when wizard step changes
-  useEffect(() => { setDrawerOpen(false); }, [step]);
-
-  // Sync step → URL so each step has its own URL (browser history, refresh-safe)
-  useEffect(() => {
-    setSearchParams(prev => {
-      const next = new URLSearchParams(prev);
-      next.set("step", step);
-      return next;
-    }, { replace: true });
-  }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Resume: load run info when ?resume=id is present
-  const { data: resumeRunData } = useRunDetail(resumeId);
-  useEffect(() => {
-    if (!resumeId || !resumeRunData) return;
-    setDraftRunId(resumeId);
-    setLabel(resumeRunData.label || "");
-    const savedStep = resumeRunData.wizard_step ?? 0;
-    const urlStep   = parseInt(searchParams.get("step"), 10);
-    // If GA already ran, jump to step 5 (edit); otherwise restore saved/URL step
-    if (resumeRunData.status === "done" || resumeRunData.status === "running" || resumeRunData.status === "pending") {
-      const jumpTo = resumeRunData.status === "done" ? 5 : 4;
-      // If URL has a valid step >= jumpTo, honour it (e.g. user bookmarked step 6)
-      const effectiveStep = (!isNaN(urlStep) && urlStep >= jumpTo && urlStep <= 6) ? urlStep : jumpTo;
-      setStep(effectiveStep);
-      setCompletedUpTo(Math.max(jumpTo, savedStep));
-      setRunId(resumeId);
-    } else {
-      const effectiveStep = (!isNaN(urlStep) && urlStep >= 0 && urlStep <= savedStep) ? urlStep : savedStep;
-      setStep(effectiveStep);
-      setCompletedUpTo(savedStep);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resumeId, resumeRunData?.id]);
-
-  // Fetch all states from backend if resuming
-  useEffect(() => {
-    if (!resumeId || !draftRunId) return;
-    Promise.all([
-      wizardStateApi.getOrders(draftRunId),
-      wizardStateApi.getPriorities(draftRunId),
-      wizardStateApi.getCapacities(draftRunId),
-      wizardStateApi.getNewModelTargets(draftRunId),
-      wizardStateApi.getMaterialEtas(draftRunId),
-      wizardStateApi.getGcDates(draftRunId),
-    ])
-      .then(([orders, priorities, capacities, newModelTargets, materialEtas, gcDates]) => {
-        if (orders) {
-          setRegularOrders(orders.regular || []);
-          setGcOrders(orders.gc || []);
-        }
-        if (priorities) {
-          setPriorityConfig(priorities.priority_config || {});
-        }
-        if (capacities) {
-          setWorkingHoursPerDay(capacities.working_hours_per_day || 8);
-          setCapChoices(capacities.cap_choices || { regular: {}, gc: {}, noHistRegular: {}, noHistGc: {} });
-        }
-        if (newModelTargets) {
-          setImportedTargetQty(newModelTargets.targets || {});
-        }
-        if (materialEtas) {
-          setMaterialEtaOverrides(materialEtas.overrides || {});
-        }
-        if (gcDates) {
-          setGcDateOverrides(gcDates.gc_dates || {});
-        }
-        setIsLoadedFromServer(true);
-      })
-      .catch((err) => {
-        console.error("Error loading wizard state:", err);
-        setIsLoadedFromServer(true);
-      });
-  }, [resumeId, draftRunId]);
-
-  // Create a draft run on first mount (skip if resuming)
-  const draftCreated = useRef(false);
-  useEffect(() => {
-    if (resumeId) return; // resuming — skip creating new draft
-    if (draftCreated.current) return;
-    draftCreated.current = true;
-    wizardStateApi.createDraft("").then((res) => {
-      setDraftRunId(res.id);
-      // Also load default priorities so Step 2 has pre-populated assignments
-      wizardStateApi.getPriorities(res.id).then((p) => {
-        if (p?.priority_config && Object.keys(p.priority_config).length > 0) {
-          setPriorityConfig(p.priority_config);
-        }
-      }).catch(() => {});
-      // Pre-populate Step 3 Material ETAs
-      wizardStateApi.getMaterialEtas(res.id).then((m) => {
-        if (m?.overrides && Object.keys(m.overrides).length > 0) {
-          setMaterialEtaOverrides(m.overrides);
-        }
-      }).catch(() => {});
-      // Pre-populate Step 4 GC dates
-      wizardStateApi.getGcDates(res.id).then((g) => {
-        if (g?.gc_dates && Object.keys(g.gc_dates).length > 0) {
-          setGcDateOverrides(g.gc_dates);
-        }
-      }).catch(() => {});
-      setIsLoadedFromServer(true);
-    }).catch(() => {
-      // Non-fatal: wizard works without persistence if draft creation fails
-    });
-  }, [resumeId]);
-
-  // ── Debounced auto-save effects ──────────────────────────────────────────
-  // Step 2 (capacity/priority/new-model-targets) is handled by Step2Capacity's
-  // own 400ms auto-save. Only auto-save the steps that have no child component save.
-
-  // Save Step 1 Orders
-  useEffect(() => {
-    if (!isLoadedFromServer || !draftRunId) return;
-    const timer = setTimeout(() => {
-      wizardStateApi.putOrders(draftRunId, { regular: regularOrders, gc: gcOrders })
-        .catch(() => {});
-    }, 800);
-    return () => clearTimeout(timer);
-  }, [draftRunId, regularOrders, gcOrders, isLoadedFromServer]);
-
-  // Save Step 3 Material ETA Overrides
-  useEffect(() => {
-    if (!isLoadedFromServer || !draftRunId) return;
-    const timer = setTimeout(() => {
-      wizardStateApi.putMaterialEtas(draftRunId, { overrides: materialEtaOverrides })
-        .catch(() => {});
-    }, 800);
-    return () => clearTimeout(timer);
-  }, [draftRunId, materialEtaOverrides, isLoadedFromServer]);
-
-  // Save Step 4 GC Date Overrides
-  useEffect(() => {
-    if (!isLoadedFromServer || !draftRunId) return;
-    const timer = setTimeout(() => {
-      wizardStateApi.putGcDates(draftRunId, { gc_dates: gcDateOverrides })
-        .catch(() => {});
-    }, 800);
-    return () => clearTimeout(timer);
-  }, [draftRunId, gcDateOverrides, isLoadedFromServer]);
-
-  // Helper to save step state on transition / exit
-  const saveStepState = useCallback((stepToSave) => {
-    if (!draftRunId) return Promise.resolve();
-    if (stepToSave === 0) {
-      return wizardStateApi.putOrders(draftRunId, { regular: regularOrders, gc: gcOrders });
-    }
-    if (stepToSave === 1) {
-      return Promise.all([
-        wizardStateApi.putPriorities(draftRunId, { priority_config: priorityConfig }),
-        wizardStateApi.putCapacities(draftRunId, { working_hours_per_day: workingHoursPerDay, cap_choices: capChoices }),
-        wizardStateApi.putNewModelTargets(draftRunId, { targets: importedTargetQty }),
-      ]);
-    }
-    if (stepToSave === 2) {
-      return wizardStateApi.putMaterialEtas(draftRunId, { overrides: materialEtaOverrides });
-    }
-    if (stepToSave === 3) {
-      return wizardStateApi.putGcDates(draftRunId, { gc_dates: gcDateOverrides });
-    }
-    return Promise.resolve();
-  }, [draftRunId, regularOrders, gcOrders, priorityConfig, workingHoursPerDay, capChoices, importedTargetQty, materialEtaOverrides, gcDateOverrides]);
-
-  // Derived sets for downstream steps
-  const selectedRegularIds = useMemo(
-    () => new Set(regularOrders.map(o => o.order_id)),
-    [regularOrders],
-  );
-  const selectedGcIds = useMemo(
-    () => new Set(gcOrders.map(o => o.order_id)),
-    [gcOrders],
-  );
-  const allSelectedIds = useMemo(
-    () => new Set([...selectedRegularIds, ...selectedGcIds]),
-    [selectedRegularIds, selectedGcIds],
-  );
-
-  // Derived knownOrdersMap (article/die/style/tool per order_id)
-  const knownOrdersMap = useMemo(() => {
-    const map = {};
-    for (const o of [...regularOrders, ...gcOrders]) {
-      if (!o.order_id) continue;
-      map[o.order_id] = {
-        article:     (o.order?.ARTICLE   || "").trim(),
-        cutting_die: (o.order?.DAOMH_    || "").trim(),
-        style:       (o.order?.XieMing_  || "").trim(),
-        tool:        (o.order?.XTMH_     || "").trim(),
-        last_die:    (o.order?.DDMH_     || "").trim(),
-        color_no:    (o.order?.COLNO     || "").trim(),
-        qty:         parseInt(o.order?.PAIRQTY || 0, 10),
-        crd:         o.order?.DUEDT || null,
-      };
-    }
-    return map;
-  }, [regularOrders, gcOrders]);
-
-  // Run status polling
-  const { data: statusData } = useRunStatus(runId, !!runId);
-  const runStatus = statusData?.status ?? null;
-  const runDone   = runStatus === "done";
-  const gaHasRun  = runId != null; // GA was triggered (may still be running)
-
-  // Persist wizard step when it changes
-  useEffect(() => {
-    if (!draftRunId) return;
-    wizardStateApi.saveWizardStep(draftRunId, step).catch(() => {});
-  }, [draftRunId, step]);
-
-  // ── Dispatch gate: steps 2 and 6 require all subs to confirm before advancing
-  const isDispatchGatedStep = step === 1 || step === 5; // wizard index 1 = step2, 5 = step6
-  const dispatchGateRunId   = step === 5 ? runId : draftRunId;
-  const dispatchGateStepNum = DISPATCH_STEPS[step]; // 2 or 6
-
-  const { data: dispatchGateStatus } = useQuery({
-    queryKey:        ["dispatch-status", dispatchGateRunId, dispatchGateStepNum],
-    queryFn:         () => http.get(`/runs/${dispatchGateRunId}/dispatch-status`, { params: { step: dispatchGateStepNum } }).then(r => r.data),
-    enabled:         isDispatchGatedStep && !!dispatchGateRunId && !isSub,
-    refetchInterval: 5000,
-  });
-
-  // Block only when: dispatch sent AND not all planners confirmed yet
-  const dispatchBlocked = isDispatchGatedStep && !isSub && (() => {
-    if (!dispatchGateStatus?.dispatched) return false;
-    const planners       = dispatchGateStatus.planners || [];
-    const confirmedCount = planners.filter(p => p.status === "confirmed").length;
-    return confirmedCount < planners.length;
-  })();
-
-  // ── Step navigation constraints ────────────────────────────────────────────
-  function canNavigateTo(target) {
-    if (step === 1 && step2Loading && target > 1) return false;
-    // Block forward nav from gated steps when dispatch not fully confirmed
-    if (dispatchBlocked && target > step) return false;
-    const maxReachable = completedUpTo + 1;
-    // While GA is actively running, block navigation to steps 0-3
-    if (runStatus === "running" && target < 4) return false;
-    // After GA completes, steps 0-3 are viewable (read-only) — allow navigation
-    if (gaHasRun && target < 4) return true;
-    if (target <= step) return true;
-    if (target > maxReachable) return false;
-    if (target >= 5 && !runDone) return false;  // edit+confirm require run done
-    return true;
-  }
-
-  // Step 4 = RunGA — must wait for run to finish before advancing to edit/confirm
-  const canAdvanceFromCurrent = (step !== 4 || runDone) && !(step === 1 && step2Loading) && !dispatchBlocked;
-
-  function handleNext() {
-    if (!canAdvanceFromCurrent) return;
-    saveStepState(step).catch(err => console.error("Failed to save step state:", err));
-    setCompletedUpTo(prev => Math.max(prev, step));
-    setStep(s => Math.min(s + 1, STEPS.length - 1));
-  }
-
-  function handlePrev() {
-    if (step > 0) {
-      saveStepState(step).catch(err => console.error("Failed to save step state:", err));
-      setStep(s => s - 1);
-    }
-  }
-
-  function goStep(target) {
-    if (canNavigateTo(target)) {
-      saveStepState(step).catch(err => console.error("Failed to save step state:", err));
-      setStep(target);
-    }
-  }
-
-  async function discardDraft() {
-    if (!window.confirm("Hủy bỏ kế hoạch nháp này? Mọi thao tác đã thực hiện sẽ bị mất.")) return;
-    // Delete both the wizard draft run and the GA run (if different).
-    // Cascade on FK deletes all related wizard data automatically.
-    const toDelete = [...new Set([draftRunId, runId].filter(Boolean))];
-    await Promise.allSettled(toDelete.map(id => runsApi.delete(id)));
-    // Also close any other stale wizard sessions and clear the card cache.
-    await wizardStateApi.closeStaleWizardSessions().catch(() => {});
-    queryClient.setQueryData(["wizard-in-progress"], null);
-    queryClient.invalidateQueries({ queryKey: ["wizard-in-progress"] });
-    navigate("/runs");
-  }
-
-  // ── Step component map ─────────────────────────────────────────────────────
   const stepProps = {
     onPrev: handlePrev,
     onNext: handleNext,
@@ -522,36 +53,17 @@ export default function GAConfigPage() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Topbar */}
-      <header className="flex items-center h-14 px-5 border-b border-gray-200 bg-white shrink-0 gap-3">
-        <div>
-          <div className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-            <button
-              className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-transparent text-xs font-medium text-gray-500 hover:bg-gray-100 transition-colors"
-              onClick={() => {
-                saveStepState(step)
-                  .catch(err => console.error("Failed to save step state:", err))
-                  .finally(() => navigate("/runs"));
-              }}>
-              <ArrowLeft size={13} /> Lập lịch
-            </button>
-
-            {resumeId ? "Tiếp tục kế hoạch" : "Kế hoạch GA mới"}
-          </div>
-          <div className="text-xs text-gray-400 mt-0.5">
-            Bước {step + 1}/{STEPS.length} · {STEPS[step].title} · TailFollow + ILS
-          </div>
-        </div>
-        <div className="flex-1" />
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
-          <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />Nháp
-        </span>
-        <button
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-transparent text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
-          onClick={discardDraft}>
-          <X size={13} /> Hủy nháp
-        </button>
-      </header>
+      {/* Topbar / Header */}
+      <GAConfigHeader
+        step={step}
+        resumeId={resumeId}
+        onBack={() => {
+          saveStepState(step)
+            .catch(err => console.error("Failed to save step state:", err))
+            .finally(() => navigate("/runs"));
+        }}
+        onDiscard={discardDraft}
+      />
 
       {/* Sub-planner read-only banner */}
       {isSub && (
@@ -588,86 +100,85 @@ export default function GAConfigPage() {
         />
       )}
 
-      {/* Step content — always visible */}
+      {/* Step content */}
       <div className="flex-1 min-h-0 relative bg-gray-50">
         <div className="absolute inset-0 p-5 overflow-hidden flex flex-col">
           <>
-          {step === 0 && (
-            <Step1Orders
-              regularOrders={regularOrders}
-              setRegularOrders={setRegularOrders}
-              gcOrders={gcOrders}
-              setGcOrders={setGcOrders}
-              draftRunId={draftRunId}
-              readOnly={gaHasRun}
-              {...stepProps}
-            />
-          )}
-          {step === 1 && (
-            <Step2Capacity
-              selectedRegularIds={selectedRegularIds}
-              selectedGcIds={selectedGcIds}
-              knownOrdersMap={knownOrdersMap}
-              priorityConfig={priorityConfig}
-              onPriorityConfigChange={setPriorityConfig}
-              workingHoursPerDay={workingHoursPerDay}
-              onWorkingHoursChange={setWorkingHoursPerDay}
-              capChoices={capChoices}
-              onCapChoicesChange={setCapChoices}
-              importedTargetQty={importedTargetQty}
-              onImportedTargetQtyChange={setImportedTargetQty}
-              draftRunId={draftRunId}
-              onLoadingChange={setStep2Loading}
-              readOnly={gaHasRun}
-              dispatchBlocked={dispatchBlocked}
-              {...stepProps}
-            />
-          )}
-          {step === 2 && (
-            <Step3MaterialETA
-              selectedIds={allSelectedIds}
-              materialEtaOverrides={materialEtaOverrides}
-              setMaterialEtaOverrides={setMaterialEtaOverrides}
-              draftRunId={draftRunId}
-              readOnly={gaHasRun}
-              {...stepProps}
-            />
-          )}
-          {step === 3 && (
-            <Step4GCDates
-              gcOrders={gcOrders}
-              gcDateOverrides={gcDateOverrides}
-              setGcDateOverrides={setGcDateOverrides}
-              draftRunId={draftRunId}
-              readOnly={gaHasRun}
-              {...stepProps}
-            />
-          )}
-          {step === 4 && (
-            <Step5RunGA
-              selectedIds={allSelectedIds}
-              excludeLines={excludeLines}
-              materialEtaOverrides={materialEtaOverrides}
-              gcDateOverrides={gcDateOverrides}
-              priorityConfig={priorityConfig}
-              workingHoursPerDay={workingHoursPerDay}
-              label={label}
-              setLabel={setLabel}
-              runId={runId}
-              setRunId={setRunId}
-              draftRunId={draftRunId}
-              canAdvance={canAdvanceFromCurrent}
-              {...stepProps}
-            />
-          )}
-          {step === 5 && (
-            <Step6Edit runId={runId} draftRunId={draftRunId} dispatchBlocked={dispatchBlocked} {...stepProps} />
-          )}
-          {step === 6 && (
-            <Step7Confirm runId={runId} draftRunId={draftRunId} label={label} onPrev={handlePrev} />
-          )}
+            {step === 0 && (
+              <Step1Orders
+                regularOrders={regularOrders}
+                setRegularOrders={setRegularOrders}
+                gcOrders={gcOrders}
+                setGcOrders={setGcOrders}
+                draftRunId={draftRunId}
+                readOnly={gaHasRun}
+                {...stepProps}
+              />
+            )}
+            {step === 1 && (
+              <Step2Capacity
+                selectedRegularIds={selectedRegularIds}
+                selectedGcIds={selectedGcIds}
+                knownOrdersMap={knownOrdersMap}
+                priorityConfig={priorityConfig}
+                onPriorityConfigChange={setPriorityConfig}
+                workingHoursPerDay={workingHoursPerDay}
+                onWorkingHoursChange={setWorkingHoursPerDay}
+                capChoices={capChoices}
+                onCapChoicesChange={setCapChoices}
+                importedTargetQty={importedTargetQty}
+                onImportedTargetQtyChange={setImportedTargetQty}
+                draftRunId={draftRunId}
+                onLoadingChange={setStep2Loading}
+                readOnly={gaHasRun}
+                dispatchBlocked={dispatchBlocked}
+                {...stepProps}
+              />
+            )}
+            {step === 2 && (
+              <Step3MaterialETA
+                selectedIds={allSelectedIds}
+                materialEtaOverrides={materialEtaOverrides}
+                setMaterialEtaOverrides={setMaterialEtaOverrides}
+                draftRunId={draftRunId}
+                readOnly={gaHasRun}
+                {...stepProps}
+              />
+            )}
+            {step === 3 && (
+              <Step4GCDates
+                gcOrders={gcOrders}
+                gcDateOverrides={gcDateOverrides}
+                setGcDateOverrides={setGcDateOverrides}
+                draftRunId={draftRunId}
+                readOnly={gaHasRun}
+                {...stepProps}
+              />
+            )}
+            {step === 4 && (
+              <Step5RunGA
+                selectedIds={allSelectedIds}
+                excludeLines={excludeLines}
+                materialEtaOverrides={materialEtaOverrides}
+                gcDateOverrides={gcDateOverrides}
+                priorityConfig={priorityConfig}
+                workingHoursPerDay={workingHoursPerDay}
+                label={label}
+                setLabel={setLabel}
+                runId={runId}
+                setRunId={setRunId}
+                draftRunId={draftRunId}
+                canAdvance={canAdvanceFromCurrent}
+                {...stepProps}
+              />
+            )}
+            {step === 5 && (
+              <Step6Edit runId={runId} draftRunId={draftRunId} dispatchBlocked={dispatchBlocked} {...stepProps} />
+            )}
+            {step === 6 && (
+              <Step7Confirm runId={runId} draftRunId={draftRunId} label={label} onPrev={handlePrev} />
+            )}
           </>
-
         </div>
       </div>
     </div>
