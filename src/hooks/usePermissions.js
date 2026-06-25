@@ -22,6 +22,7 @@ export function usePermissions() {
     canSeeEvents: isMain,
     canSeeSubcontractor: true,
     canSeeMaterialETA: true,
+    canSeeScheduleAdjust: isSub,
     canSeeShoeTargets: isMain,
     canSeeNewModels: isMain,
     canSeeFactories: isMain,

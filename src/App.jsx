@@ -20,6 +20,7 @@ import NewModelsPage from "./pages/new-models/NewModelsPage";
 import SubPlannerWorkspace from "./pages/sub-planner/SubPlannerWorkspace";
 import RunDetailForSub from "./pages/sub-planner/RunDetailForSub";
 import LineAssignmentPage from "./pages/line-management/LineAssignmentPage";
+import ScheduleAdjustPage from "./pages/schedule-adjust/ScheduleAdjustPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -59,6 +60,7 @@ function AppShell() {
           <Route path="/my-tasks" element={<SubPlannerWorkspace />} />
           <Route path="/my-tasks/:runId" element={<RunDetailForSub />} />
           <Route path="/line-assignments" element={<LineAssignmentPage />} />
+          <Route path="/schedule-adjust" element={<ScheduleAdjustPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

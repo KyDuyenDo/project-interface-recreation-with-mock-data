@@ -5,6 +5,7 @@ import {
   LayoutDashboard, Table2, CalendarDays, Play, Bell,
   Factory, Package, BarChart2, Zap, Settings, Users,
   RefreshCw, Activity, LogOut, ClipboardList, GitBranch, Shield,
+  CalendarClock,
 } from "lucide-react";
 import { clsx } from "clsx";
 import NotificationBell from "../notifications/NotificationBell";
@@ -31,8 +32,9 @@ export function Sidebar() {
     { to: "/",          label: "Dashboard",           Icon: LayoutDashboard, show: true },
     { to: "/orders",    label: "BAO_CAO_SO_DUOI",     Icon: Table2,   badge: "480", show: perms.canSeeOrders },
     { to: "/khx-plan",  label: "KHX",                 Icon: CalendarDays,   show: perms.canSeeKHX },
-    { to: "/runs",      label: "Lập lịch",            Icon: Play,           show: perms.canSeeLapLich },
-    { to: "/my-tasks",  label: "Công việc của tôi",   Icon: ClipboardList,  show: perms.canSeeMyTasks, highlight: true },
+    { to: "/runs",            label: "Lập lịch",            Icon: Play,           show: perms.canSeeLapLich },
+    { to: "/schedule-adjust", label: "Điều chỉnh lịch",    Icon: CalendarClock,  show: perms.canSeeScheduleAdjust, highlight: true },
+    { to: "/my-tasks",        label: "Công việc của tôi",  Icon: ClipboardList,  show: perms.canSeeMyTasks, highlight: true },
     { to: "/events",    label: "Events",               Icon: Bell,           show: perms.canSeeEvents },
     { section: "Tracking" },
     { to: "/subcontractor", label: "Subcontractor",     Icon: Factory,    show: perms.canSeeSubcontractor },
