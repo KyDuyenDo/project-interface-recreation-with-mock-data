@@ -4,7 +4,7 @@ import { clsx } from "clsx";
 import {
   Undo2, Eye, Save, CheckCircle2, ChevronLeft, ChevronRight,
   AlertTriangle, Lock, ArrowLeft, ListOrdered, CalendarDays,
-  History, X, Snowflake, Calendar, Info,
+  History, X, Snowflake, Calendar, Info, Table2,
 } from "lucide-react";
 
 import { useAuthStore } from "../../store/authStore";
@@ -17,6 +17,7 @@ import { fmtDate } from "../../utils";
 import ScheduleCalendar from "../ga-config/components/ScheduleCalendar";
 import LineSequenceTab  from "../ga-config/components/LineSequenceTab";
 import DailyReport      from "../ga-config/components/DailyReport";
+import ScheduleTable    from "../ga-config/components/ScheduleTable";
 
 // ── Helpers (same as Step6Edit) ───────────────────────────────────────────────
 const PALETTE = [
@@ -335,6 +336,7 @@ function DiffDrawer({ edits, onClose }) {
 // ── Main tabs ─────────────────────────────────────────────────────────────────
 const MAIN_TABS = [
   { key: "lich",    label: "Lịch sắp xếp",  Icon: Calendar },
+  { key: "bang",    label: "Bảng chi tiết",  Icon: Table2 },
   { key: "lineup",  label: "Nối đuôi",       Icon: ListOrdered },
   { key: "daily",   label: "Báo cáo ngày",   Icon: CalendarDays },
   { key: "history", label: "Lịch sử",        Icon: History },
@@ -378,10 +380,8 @@ export default function ScheduleAdjustPage() {
   const [saveStatus,  setSaveStatus]  = useState("idle");
   const saveTimer = useRef(null);
 
-  const [mainTab,       setMainTab]       = useState("lich");
-  const [rightOpen,     setRightOpen]     = useState(true);
-  const [selectedOrder, setSelectedOrder] = useState(null);
-  const [showDiff,      setShowDiff]      = useState(false);
+  const [mainTab,  setMainTab]  = useState("lich");
+  const [showDiff, setShowDiff] = useState(false);
 
   const hasChanges = localChunks !== null;
 
@@ -534,24 +534,9 @@ export default function ScheduleAdjustPage() {
           ))}
         </div>
 
-        {/* Frozen zone info + right panel toggle */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 text-xs text-slate-400">
-            <Snowflake size={12} className="text-blue-400 shrink-0" />
-            <span>Đóng băng đến <strong className="text-slate-600">{fmtDate(FROZEN_UNTIL)}</strong></span>
-          </div>
-          <button
-            onClick={() => setRightOpen(v => !v)}
-            title={rightOpen ? "Ẩn bảng đơn" : "Mở bảng đơn"}
-            className={clsx(
-              "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium border transition",
-              rightOpen
-                ? "border-blue-200 bg-blue-50 text-blue-700"
-                : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
-            )}>
-            {rightOpen ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
-            Bảng đơn
-          </button>
+        <div className="flex items-center gap-1.5 text-xs text-slate-400">
+          <Snowflake size={12} className="text-blue-400 shrink-0" />
+          <span>Đóng băng đến <strong className="text-slate-600">{fmtDate(FROZEN_UNTIL)}</strong></span>
         </div>
       </div>
 
@@ -582,6 +567,13 @@ export default function ScheduleAdjustPage() {
                     hasDailyData={dailyRows.length > 0}
                     viewOnly={false}
                   />
+                </div>
+              )}
+
+              {/* Bảng chi tiết tab */}
+              {mainTab === "bang" && (
+                <div className="flex-1 overflow-auto bg-white">
+                  <ScheduleTable chunks={chunks} edits={edits} />
                 </div>
               )}
 
@@ -618,16 +610,6 @@ export default function ScheduleAdjustPage() {
           )}
         </div>
 
-        {/* RIGHT PANEL — Bảng đơn / Inspector */}
-        {rightOpen && (
-          <div className="shrink-0 w-80 border-l border-slate-200 flex flex-col overflow-hidden">
-            {selectedOrder ? (
-              <InspectorPanel order={selectedOrder} onClose={() => setSelectedOrder(null)} />
-            ) : (
-              <OrdersTable orders={orders} chunks={chunks} onSelectOrder={setSelectedOrder} />
-            )}
-          </div>
-        )}
       </div>
 
       {/* DIFF DRAWER */}
