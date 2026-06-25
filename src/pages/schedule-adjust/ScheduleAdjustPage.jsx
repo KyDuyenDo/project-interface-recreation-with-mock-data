@@ -440,10 +440,10 @@ export default function ScheduleAdjustPage() {
   const runLabel    = runData?.run_label ?? `Run #${ACTIVE_RUN_ID}`;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-slate-50">
+    <div className="flex flex-col h-full overflow-hidden bg-white">
 
       {/* ── TOPBAR ─────────────────────────────────────────────────────────── */}
-      <div className="shrink-0 h-[52px] flex items-center gap-3 border-b border-slate-200 bg-white px-4">
+      <div className="shrink-0 h-12 flex items-center gap-3 border-b border-slate-200 bg-white px-4">
         {/* Title + run context */}
         <div className="flex items-center gap-2 min-w-0 shrink-0">
           <span className="text-sm font-bold text-slate-800">Điều chỉnh lịch</span>
@@ -516,34 +516,32 @@ export default function ScheduleAdjustPage() {
 
       {/* ── TAB BAR ────────────────────────────────────────────────────────── */}
       <div className="shrink-0 flex items-center justify-between border-b border-slate-200 bg-white px-4">
-        <div className="flex items-center gap-0">
+        <div className="flex items-center">
           {MAIN_TABS.map(({ key, label, Icon }) => (
             <button key={key} onClick={() => setMainTab(key)}
               className={clsx(
-                "flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap",
+                "flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors whitespace-nowrap",
                 mainTab === key
                   ? "border-blue-600 text-blue-700"
                   : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
               )}>
-              <Icon size={14} />
+              <Icon size={13} />
               {label}
               {key === "history" && chunkEdits.length > 0 && (
-                <span className="rounded-full bg-slate-100 text-slate-600 text-[10px] px-1.5 font-semibold">{chunkEdits.length}</span>
+                <span className="rounded-full bg-blue-100 text-blue-700 text-[10px] px-1.5 font-bold">{chunkEdits.length}</span>
               )}
             </button>
           ))}
         </div>
 
         <div className="flex items-center gap-1.5 text-xs text-slate-400">
-          <Snowflake size={12} className="text-blue-400 shrink-0" />
+          <Snowflake size={11} className="text-blue-400 shrink-0" />
           <span>Đóng băng đến <strong className="text-slate-600">{fmtDate(FROZEN_UNTIL)}</strong></span>
         </div>
       </div>
 
       {/* ── BODY ────────────────────────────────────────────────────────────── */}
-      <div className="flex flex-1 min-h-0 overflow-hidden bg-slate-100">
-
-        {/* MAIN CONTENT AREA (tabs) */}
+      <div className="flex flex-1 min-h-0 overflow-hidden bg-white">
         <div className="flex-1 min-h-0 flex flex-col min-w-0">
           {dataLoading ? (
             <div className="flex flex-1 items-center justify-center">
@@ -551,76 +549,69 @@ export default function ScheduleAdjustPage() {
             </div>
           ) : (
             <>
-              {/* Calendar tab */}
+              {/* Calendar tab — ScheduleCalendar manages its own scroll */}
               {mainTab === "lich" && (
-                <div className="flex-1 min-h-0 flex flex-col p-3 gap-0">
-                  <div className="flex-1 min-h-0 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col">
-                    <ScheduleCalendar
-                      runId={ACTIVE_RUN_ID}
-                      orders={orders}
-                      chunks={chunks}
-                      initialChunks={apiChunks}
-                      setChunks={setLocalChunks}
-                      edits={edits}
-                      setEdits={setEdits}
-                      onChunkChanged={handleChunkChanged}
-                      usingFallback={dailyRows.length === 0}
-                      hasDailyData={dailyRows.length > 0}
-                      viewOnly={false}
-                    />
-                  </div>
+                <div className="flex-1 min-h-0 overflow-hidden flex flex-col p-3">
+                  <ScheduleCalendar
+                    runId={ACTIVE_RUN_ID}
+                    orders={orders}
+                    chunks={chunks}
+                    initialChunks={apiChunks}
+                    setChunks={setLocalChunks}
+                    edits={edits}
+                    setEdits={setEdits}
+                    onChunkChanged={handleChunkChanged}
+                    usingFallback={dailyRows.length === 0}
+                    hasDailyData={dailyRows.length > 0}
+                    viewOnly={false}
+                  />
                 </div>
               )}
 
               {/* Bảng chi tiết tab */}
               {mainTab === "bang" && (
-                <div className="flex-1 min-h-0 flex flex-col p-3">
-                  <div className="flex-1 min-h-0 rounded-xl border border-slate-200 bg-white shadow-sm overflow-auto">
+                <div className="flex-1 min-h-0 overflow-auto">
+                  <div className="p-5">
                     <ScheduleTable chunks={chunks} edits={edits} />
                   </div>
                 </div>
               )}
 
-              {/* Lineup tab */}
+              {/* Nối đuôi tab */}
               {mainTab === "lineup" && (
-                <div className="flex-1 min-h-0 flex flex-col p-3">
-                  <div className="flex-1 min-h-0 rounded-xl border border-slate-200 bg-white shadow-sm overflow-auto">
+                <div className="flex-1 min-h-0 overflow-auto">
+                  <div className="p-5">
                     <LineSequenceTab runId={ACTIVE_RUN_ID} orders={orders} />
                   </div>
                 </div>
               )}
 
-              {/* Daily report tab */}
+              {/* Báo cáo ngày tab — DailyReport manages its own internal scroll */}
               {mainTab === "daily" && (
-                <div className="flex-1 min-h-0 flex flex-col p-3">
-                  <div className="flex-1 min-h-0 rounded-xl border border-slate-200 bg-white shadow-sm overflow-auto">
-                    <DailyReport runId={ACTIVE_RUN_ID} capacityOverrides={{}} />
-                  </div>
+                <div className="flex-1 min-h-0 overflow-hidden p-4">
+                  <DailyReport runId={ACTIVE_RUN_ID} capacityOverrides={{}} />
                 </div>
               )}
 
-              {/* History tab */}
+              {/* Lịch sử tab */}
               {mainTab === "history" && (
-                <div className="flex-1 min-h-0 flex flex-col p-3">
-                  <div className="flex-1 min-h-0 rounded-xl border border-slate-200 bg-white shadow-sm overflow-auto">
-                    {chunkEdits.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center h-full gap-2 text-slate-400 py-16">
-                        <History size={36} strokeWidth={1.2} />
-                        <p className="text-sm">Chưa có thay đổi nào trong phiên này.</p>
-                        <p className="text-xs text-slate-300">Các chỉnh sửa lịch sẽ hiển thị ở đây.</p>
-                      </div>
-                    ) : (
-                      <div className="max-w-3xl mx-auto py-4">
-                        <HistoryLog edits={chunkEdits} />
-                      </div>
-                    )}
-                  </div>
+                <div className="flex-1 min-h-0 overflow-auto">
+                  {chunkEdits.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full gap-2 text-slate-400 py-20">
+                      <History size={36} strokeWidth={1.2} />
+                      <p className="text-sm font-medium text-slate-500">Chưa có thay đổi nào trong phiên này.</p>
+                      <p className="text-xs text-slate-300">Các chỉnh sửa lịch sẽ hiển thị ở đây.</p>
+                    </div>
+                  ) : (
+                    <div className="max-w-3xl mx-auto py-5 px-5">
+                      <HistoryLog edits={chunkEdits} />
+                    </div>
+                  )}
                 </div>
               )}
             </>
           )}
         </div>
-
       </div>
 
       {/* DIFF DRAWER */}
