@@ -38,8 +38,8 @@ const WIZARD_TABS = [0, 1, 2, 3];
 const DISPATCH_STEPS = { 1: 2, 5: 6 };
 
 export default function RunDetailPage() {
-  const params = useParams();
-  const runId = params.id ? parseInt(params.id, 10) : null;
+  const { runId: runIdStr } = useParams();
+  const runId = runIdStr ? parseInt(runIdStr, 10) : null;
   const navigate = useNavigate();
 
   const [step, setStep] = useState(4); // Default to Step 5 (Results summary)

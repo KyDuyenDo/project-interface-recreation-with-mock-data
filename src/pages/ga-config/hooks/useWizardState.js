@@ -65,6 +65,8 @@ export function useWizardState() {
   }, [step, setSearchParams]);
 
   // Resume: load run info when ?resume=id is present
+  // NOTE: searchParams is intentionally excluded from deps to avoid a
+  // circular loop (step→URL sync triggers this effect which overrides step).
   const { data: resumeRunData } = useRunDetail(resumeId);
   useEffect(() => {
     if (!resumeId || !resumeRunData) return;
@@ -84,7 +86,8 @@ export function useWizardState() {
       setStep(effectiveStep);
       setCompletedUpTo(savedStep);
     }
-  }, [resumeId, resumeRunData, searchParams]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeId, resumeRunData]);
 
   // Fetch all states from backend if resuming
   useEffect(() => {
