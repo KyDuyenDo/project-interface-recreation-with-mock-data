@@ -457,28 +457,45 @@ export const THROUGHPUT_OVERRIDES = Array.from({ length: 10 }, (_, i) => ({
 
 // ── Run output orders ─────────────────────────────────────────────────────────
 export function makeOutputOrders(runId) {
+  const DIE_CODES = ["DAOMH1001","DAOMH1002","DAOMH1003","DAOMH2001","DAOMH2002","DAOMH3001","DAOMH3002","DAOMH4001"];
+  const STATES = ["IN_PROGRESS","IN_PROGRESS","FUTURE_PLANNED","FUTURE_PLANNED","FUTURE_PLANNED",null,null,null];
   const orders = Array.from({ length: 120 }, (_, i) => {
     const r = BAO_CAO_ALL[i];
+    const fprefix = r.ZLBH.slice(0, 1);
+    const possibleLines = LINES.filter(l => l.startsWith(fprefix + "_"));
+    const lineMay = possibleLines[i % possibleLines.length] || LINES[i % LINES.length];
+    const lineGo  = possibleLines[(i + 1) % possibleLines.length] || lineMay;
     const goStart = addDays(TODAY, ri(0, 40));
-    const goEnd = addDays(goStart, ri(2, 8));
-    const crd = addDays(goEnd, ri(-3, 6));
-    const isLate = goEnd > crd;
+    const goEnd   = addDays(goStart, ri(2, 8));
+    const crd     = addDays(goEnd, ri(-3, 6));
+    const isLate  = goEnd > crd;
+    const state   = STATES[i % STATES.length];
+    const qty     = r.QTY;
     return {
-      order_id: r.RY,
-      article: r.Article,
-      model_name: r.XieMing,
-      customer: r.CUSTNAME,
-      factory: r.ZLBH.slice(0, 1) + "-F2",
-      line: pick(LINES),
-      qty: r.QTY,
-      crd: isoDate(crd),
-      sew_start: isoDate(addDays(goStart, -ri(3, 7))),
-      sew_end: isoDate(addDays(goStart, -1)),
-      go_start: isoDate(goStart),
-      go_end: isoDate(goEnd),
-      lpd: r.LPD,
-      is_late: isLate,
-      status: isLate ? "late" : "on_time",
+      order_id:    r.RY,
+      scbh:        r.RY,
+      article:     r.Article,
+      model_name:  r.XieMing,
+      customer:    r.CUSTNAME,
+      factory:     fprefix + "-F2",
+      line:        lineMay,
+      line_may:    lineMay,
+      line_go:     lineGo,
+      dep_name_may: lineMay,
+      dep_name_go:  lineGo,
+      qty,
+      qty_total:   qty,
+      crd:         isoDate(crd),
+      sew_start:   isoDate(addDays(goStart, -ri(3, 7))),
+      sew_end:     isoDate(addDays(goStart, -1)),
+      go_start:    isoDate(goStart),
+      go_end:      isoDate(goEnd),
+      lpd:         r.LPD,
+      is_late:     isLate,
+      status:      isLate ? "late" : "on_time",
+      state,
+      cutting_die: DIE_CODES[i % DIE_CODES.length],
+      sizes:       {},
     };
   });
   return { orders, items: orders, total: orders.length };
@@ -769,35 +786,51 @@ export function makeOutputLineload(runId) {
 
 // ── Step 6 — Run Genes (lineup tab details) ──────────────────────────────────
 export function makeRunGenes(runId) {
+  const DIE_CODES = ["DAOMH1001","DAOMH1002","DAOMH1003","DAOMH2001","DAOMH2002","DAOMH3001","DAOMH3002","DAOMH4001"];
+  const TOOLS     = ["DAO_A","DAO_B","DAO_C","DAO_D","DAO_E"];
+  const LASTS     = ["LAST-001","LAST-002","LAST-003","LAST-004","LAST-005","LAST-006"];
   const items = Array.from({ length: 120 }, (_, i) => {
     const r = BAO_CAO_ALL[i];
     const isGc = WIZARD_GC_SOURCES.some(x => x.RY === r.RY);
     const fprefix = r.ZLBH.slice(0, 1);
-    const linePool = isGc
+    const mayPool = isGc
       ? GC_DEPARTMENTS.map(d => d.dep_no)
       : LINES.filter(l => l.startsWith(fprefix + "_"));
-    const line = linePool[i % linePool.length];
-    const goStart = addDays(TODAY, ri(3, 45));
-    const goEnd = addDays(goStart, ri(2, 8));
+    const goPool  = LINES.filter(l => l.startsWith(fprefix + "_"));
+    const lineMay = mayPool[i % mayPool.length] || LINES[i % LINES.length];
+    const lineGo  = isGc ? lineMay : (goPool[(i + 1) % goPool.length] || lineMay);
+    const depNameMay = isGc ? `Gia công ${(i % 6) + 1}` : lineMay;
+    const depNameGo  = lineGo;
+    const goStart  = addDays(TODAY, ri(3, 45));
+    const goEnd    = addDays(goStart, ri(2, 8));
     const sewStart = addDays(goStart, -ri(3, 8));
-    const sewEnd = addDays(goStart, -1);
+    const sewEnd   = addDays(goStart, -1);
     return {
-      order_id:  r.RY,
-      article:   r.Article,
-      model:     r.XieMing,
-      customer:  r.CUSTNAME,
-      line,
-      qty:       r.QTY,
-      crd:       r.CRD,
-      go_start:  isoDate(goStart),
-      go_end:    isoDate(goEnd),
-      sew_start: isoDate(sewStart),
-      sew_end:   isoDate(sewEnd),
-      is_gc:     isGc,
-      is_late:   goEnd > new Date(r.CRD),
+      order_id:     r.RY,
+      article:      r.Article,
+      style:        r.XieMing,
+      model:        r.XieMing,
+      customer:     r.CUSTNAME,
+      cutting_die:  DIE_CODES[i % DIE_CODES.length],
+      tool:         TOOLS[i % TOOLS.length],
+      last:         LASTS[i % LASTS.length],
+      line:         lineMay,
+      line_may:     lineMay,
+      line_go:      lineGo,
+      dep_name_may: depNameMay,
+      dep_name_go:  depNameGo,
+      qty:          r.QTY,
+      qty_total:    r.QTY,
+      crd:          r.CRD,
+      go_start:     isoDate(goStart),
+      go_end:       isoDate(goEnd),
+      sew_start:    isoDate(sewStart),
+      sew_end:      isoDate(sewEnd),
+      is_gc:        isGc,
+      is_late:      goEnd > new Date(r.CRD),
     };
   });
-  return { items };
+  return { items, genes: items };
 }
 
 // ── KHX Plan ──────────────────────────────────────────────────────────────────
@@ -845,45 +878,165 @@ export function makeKhxPlanSheets(runId) {
 // ── Line with running ─────────────────────────────────────────────────────────
 export function makeLineWithRunning(runId, line, scDate) {
   const targetLine = line || LINES[0];
-  const orders = Array.from({ length: ri(3, 8) }, (_, i) => {
-    const r = BAO_CAO_ALL[i * 7];
+  const date       = scDate || isoDate(TODAY);
+  const lineIdx    = LINES.indexOf(targetLine);
+  const offset     = lineIdx < 0 ? 0 : lineIdx;
+
+  const running_orders = Array.from({ length: ri(2, 4) }, (_, i) => {
+    const r = BAO_CAO_ALL[(offset * 3 + i) % BAO_CAO_ALL.length];
+    const orderQty     = r.QTY;
+    const actualQty    = ri(Math.floor(orderQty * 0.05), Math.floor(orderQty * 0.4));
+    const remainingQty = orderQty - actualQty;
     return {
-      order_id: r.RY,
-      article:  r.Article,
-      model:    r.XieMing,
-      customer: r.CUSTNAME,
-      qty:      r.QTY,
-      crd:      r.CRD,
-      status:   pick(["running", "scheduled", "pending"]),
+      scbh:          r.RY,
+      order_id:      r.RY,
+      article:       r.Article,
+      model:         r.XieMing,
+      order_qty:     orderQty,
+      actual_qty:    actualQty,
+      remaining_qty: remainingQty,
     };
   });
-  return { line: targetLine, orders, sc_date: scDate || isoDate(TODAY) };
+
+  const committed_orders = Array.from({ length: ri(2, 5) }, (_, i) => {
+    const r         = BAO_CAO_ALL[(offset * 5 + i + 20) % BAO_CAO_ALL.length];
+    const orderQty  = r.QTY;
+    const actualSew = ri(0, Math.floor(orderQty * 0.6));
+    const remainSew = orderQty - actualSew;
+    return {
+      scbh:             r.RY,
+      order_id:         r.RY,
+      article:          r.Article,
+      model:            r.XieMing,
+      customer:         r.CUSTNAME,
+      order_qty:        orderQty,
+      actual_sew_qty:   actualSew,
+      remaining_sew_qty: remainSew,
+      lpd:              r.LPD,
+      crd:              isoDate(addDays(TODAY, ri(5, 40))),
+    };
+  });
+
+  return { line: targetLine, sc_date: date, running_orders, committed_orders };
 }
 
 // ── PDSCH Running ────────────────────────────────────────────────────────────
-export const MOCK_PDSCH_RUNNING = Array.from({ length: 15 }, (_, i) => {
+export const MOCK_PDSCH_RUNNING = Array.from({ length: 20 }, (_, i) => {
   const r = BAO_CAO_ALL[i * 4];
+  const fprefix = r.ZLBH.slice(0, 1);
+  const possibleLines = LINES.filter(l => l.startsWith(fprefix + "_"));
+  const lineMay = possibleLines[i % possibleLines.length] || LINES[i % LINES.length];
+  const lineGo  = possibleLines[(i + 1) % possibleLines.length] || lineMay;
+  const DIE_CODES = ["DAOMH1001","DAOMH1002","DAOMH1003","DAOMH2001","DAOMH2002","DAOMH3001","DAOMH3002","DAOMH4001"];
+  const psdt = isoDate(addDays(TODAY, -ri(1, 15)));
+  const pedt = isoDate(addDays(TODAY, ri(2, 10)));
+  const source = i % 3 === 0 ? "lean" : "production";
+  const qty = ri(500, 3000);
+  const actualSew = source === "production" ? ri(100, Math.floor(qty * 0.7)) : 0;
+  const actualGo  = source === "production" ? ri(50,  Math.floor(qty * 0.5)) : 0;
   return {
-    order_id: r.RY, article: r.Article, model: r.XieMing,
-    lpd: r.LPD, line: pick(LINES), stage: pick(["sew", "go"]),
-    remaining_qty: ri(500, 5000),
+    order_id:       r.RY,
+    scbh:           r.RY,
+    article:        r.Article,
+    model:          r.XieMing,
+    customer:       r.CUSTNAME,
+    cutting_die:    DIE_CODES[i % DIE_CODES.length],
+    lpd:            r.LPD,
+    psdt,
+    pedt,
+    line_may:       lineMay,
+    line_go:        lineGo,
+    stage:          i % 2 === 0 ? "sew" : "go",
+    qty,
+    remaining_qty:  ri(200, 4000),
+    actual_qty_sew: actualSew,
+    actual_qty_go:  actualGo,
+    source,
   };
 });
 
 // ── Chunk edits ───────────────────────────────────────────────────────────────
-export const MOCK_CHUNK_EDITS = { items: [], edits: [] };
+export const MOCK_CHUNK_EDITS = (() => {
+  const changers = ["tran.minh", "nguyen.lan", "le.hung"];
+  const lines = LINES.slice(0, 6);
+  const edits = [];
+  BAO_CAO_ALL.slice(0, 18).forEach((r, i) => {
+    const actions = ["move","move","move","add","delete","qty_change"];
+    const action = actions[i % actions.length];
+    const fromLine = lines[i % lines.length];
+    const toLine   = lines[(i + 2) % lines.length];
+    const oldDate  = isoDate(addDays(TODAY, -ri(1, 10)));
+    const newDate  = isoDate(addDays(TODAY, ri(1, 14)));
+    edits.push({
+      action,
+      order_id:   r.RY,
+      chunk_id:   `${r.RY}|${oldDate}|${fromLine}`,
+      old_line:   action === "add"    ? null : fromLine,
+      new_line:   action === "delete" ? null : toLine,
+      old_date:   action === "add"    ? null : oldDate,
+      new_date:   action === "delete" ? null : newDate,
+      changed_by: changers[i % changers.length],
+      changed_at: addDays(TODAY, -ri(0, 3)).toISOString().replace("T", " ").slice(0, 19),
+    });
+  });
+  return edits;
+})();
 
 // ── Schedule daily ────────────────────────────────────────────────────────────
 export function makeScheduleDaily(runId, targetDate) {
   const date = targetDate || isoDate(TODAY);
-  const orders = Array.from({ length: ri(5, 12) }, (_, i) => {
-    const r = BAO_CAO_ALL[i * 3];
-    return {
-      order_id: r.RY, article: r.Article, model: r.XieMing,
-      line: pick(LINES), qty: ri(200, 1500), date, stage: pick(["sew", "go"]),
-    };
+  const DIE_CODES = ["DAOMH1001","DAOMH1002","DAOMH1003","DAOMH2001","DAOMH2002","DAOMH3001","DAOMH3002","DAOMH4001"];
+  const STATES = ["IN_PROGRESS", "FUTURE_PLANNED", null, null, null];
+
+  const lines = LINES.slice(0, 8);
+  const lineObjs = lines.map((line, li) => {
+    const sewOrders = Array.from({ length: ri(2, 5) }, (_, i) => {
+      const r = BAO_CAO_ALL[(li * 7 + i) % BAO_CAO_ALL.length];
+      const isFrozen = i === 0;
+      const state    = STATES[i % STATES.length];
+      return {
+        order_id:    r.RY,
+        article:     r.Article,
+        model:       r.XieMing,
+        customer:    r.CUSTNAME,
+        cutting_die: DIE_CODES[i % DIE_CODES.length],
+        line,
+        stage:       "sew",
+        qty:         ri(200, 1500),
+        date,
+        crd:         isoDate(addDays(TODAY, ri(5, 40))),
+        is_frozen:   isFrozen,
+        state,
+        sizes: isFrozen ? {} : {
+          "37": ri(30, 60), "38": ri(60, 120), "39": ri(80, 150),
+          "40": ri(100, 180), "41": ri(80, 150), "42": ri(40, 80),
+        },
+      };
+    });
+    const goOrders = Array.from({ length: ri(1, 3) }, (_, i) => {
+      const r = BAO_CAO_ALL[(li * 5 + i + 40) % BAO_CAO_ALL.length];
+      const isFrozen = i === 0 && li % 3 === 0;
+      const state    = STATES[(i + 1) % STATES.length];
+      return {
+        order_id:    r.RY,
+        article:     r.Article,
+        model:       r.XieMing,
+        customer:    r.CUSTNAME,
+        cutting_die: DIE_CODES[(i + 2) % DIE_CODES.length],
+        line,
+        stage:       "go",
+        qty:         ri(300, 1800),
+        date,
+        crd:         isoDate(addDays(TODAY, ri(3, 30))),
+        is_frozen:   isFrozen,
+        state,
+        sizes:       {},
+      };
+    });
+    return { line, sew_orders: sewOrders, go_orders: goOrders };
   });
-  return { orders, date };
+
+  return { lines: lineObjs, date };
 }
 
 // ── Line capacity / schedule data ────────────────────────────────────────────
