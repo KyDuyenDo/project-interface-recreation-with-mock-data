@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { clsx } from "clsx";
 import {
@@ -343,9 +344,11 @@ const MAIN_TABS = [
 ];
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
-const ACTIVE_RUN_ID = 48;
-
 export default function ScheduleAdjustPage() {
+  const { runId: runIdStr } = useParams();
+  const navigate            = useNavigate();
+  const ACTIVE_RUN_ID       = parseInt(runIdStr, 10) || 48;
+
   const perms = usePermissions();
   const toast = useToast();
   const qc    = useQueryClient();
@@ -444,11 +447,25 @@ export default function ScheduleAdjustPage() {
 
       {/* ── TOPBAR ─────────────────────────────────────────────────────────── */}
       <div className="shrink-0 h-12 flex items-center gap-3 border-b border-slate-200 bg-white px-4">
-        {/* Title + run context */}
+        {/* Back button */}
+        <button
+          onClick={() => navigate("/schedule-adjust")}
+          className="shrink-0 flex items-center gap-1 rounded-lg px-2 py-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors"
+          title="Về danh sách lịch"
+        >
+          <ArrowLeft size={14} />
+        </button>
+
+        {/* Breadcrumb: title + run context */}
         <div className="flex items-center gap-2 min-w-0 shrink-0">
-          <span className="text-sm font-bold text-slate-800">Điều chỉnh lịch</span>
+          <span
+            className="text-xs text-slate-400 hover:text-blue-600 cursor-pointer transition-colors"
+            onClick={() => navigate("/schedule-adjust")}
+          >
+            Điều chỉnh lịch
+          </span>
           <span className="text-slate-300">/</span>
-          <span className="text-xs text-slate-500 truncate max-w-[140px]">{runLabel}</span>
+          <span className="text-sm font-bold text-slate-800 truncate max-w-[160px]">{runLabel}</span>
           {hasChanges && (
             <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-700 text-[10px] font-semibold px-2 py-0.5 border border-amber-200 shrink-0">
               Chưa lưu
