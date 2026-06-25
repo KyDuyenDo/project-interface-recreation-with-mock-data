@@ -680,44 +680,51 @@ export default function ScheduleAdjustPage() {
       </div>
 
       {/* ── Late-orders slide-in drawer (right → left) ───────────────────── */}
-      {lateAlertOpen && (
-        <>
-          <div
-            className="absolute inset-0 z-40 bg-black/20"
+      {/* Backdrop */}
+      <div
+        onClick={() => setLateAlertOpen(false)}
+        className={clsx(
+          "absolute inset-0 z-40 bg-black/20 transition-opacity duration-300",
+          lateAlertOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        )}
+      />
+      {/* Panel */}
+      <div
+        className={clsx(
+          "absolute inset-y-0 right-0 z-50 flex w-[400px] max-w-full flex-col bg-white shadow-2xl border-l border-slate-200",
+          "transition-transform duration-300 ease-in-out",
+          lateAlertOpen ? "translate-x-0" : "translate-x-full"
+        )}
+      >
+        <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3 shrink-0 bg-white">
+          <Bell size={14} className="text-red-500 shrink-0" />
+          <span className="flex-1 text-sm font-bold text-slate-800">Đơn trễ hạn — cần xử lý</span>
+          <span className="rounded-full bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5">
+            {lateOrders.length} đơn
+          </span>
+          <button
             onClick={() => setLateAlertOpen(false)}
-          />
-          <div className="absolute inset-y-0 right-0 z-50 flex w-[400px] max-w-full flex-col bg-white shadow-2xl border-l border-slate-200">
-            <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3 shrink-0 bg-white">
-              <Bell size={14} className="text-red-500 shrink-0" />
-              <span className="flex-1 text-sm font-bold text-slate-800">Đơn trễ hạn — cần xử lý</span>
-              <span className="rounded-full bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5">
-                {lateOrders.length} đơn
-              </span>
-              <button
-                onClick={() => setLateAlertOpen(false)}
-                className="ml-1 rounded-md p-1 hover:bg-slate-100 text-slate-400 transition"
-              >
-                <X size={14} />
-              </button>
+            className="ml-1 rounded-md p-1 hover:bg-slate-100 text-slate-400 transition"
+          >
+            <X size={14} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
+          {lateOrders.length === 0 ? (
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 mt-2">
+              <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />
+              <p className="text-xs font-semibold text-emerald-700">Không có đơn trễ hạn trong lịch này.</p>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
-              {lateOrders.length === 0 ? (
-                <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 mt-2">
-                  <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />
-                  <p className="text-xs font-semibold text-emerald-700">Không có đơn trễ hạn trong lịch này.</p>
-                </div>
-              ) : lateOrders.map(o => (
-                <LateOrderCard
-                  key={o.order_id}
-                  order={o}
-                  note={plannerNotes[o.order_id] ?? ""}
-                  onNoteChange={(id, v) => setPlannerNotes(n => ({ ...n, [id]: v }))}
-                />
-              ))}
-            </div>
-          </div>
-        </>
-      )}
+          ) : lateOrders.map(o => (
+            <LateOrderCard
+              key={o.order_id}
+              order={o}
+              note={plannerNotes[o.order_id] ?? ""}
+              onNoteChange={(id, v) => setPlannerNotes(n => ({ ...n, [id]: v }))}
+            />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
