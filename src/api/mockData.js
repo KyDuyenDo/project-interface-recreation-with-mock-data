@@ -456,6 +456,51 @@ export const THROUGHPUT_OVERRIDES = Array.from({ length: 10 }, (_, i) => ({
 }));
 
 // ── Run output orders ─────────────────────────────────────────────────────────
+const DELAY_REASONS = [
+  {
+    code: "material_late",
+    label: "Vật liệu về trễ",
+    color: "orange",
+    note: (r, crd, goEnd) => {
+      const etaDays = Math.round((goEnd - crd) / 86400000) + ri(1, 3);
+      return `ETA vật liệu (${r.Article ?? "NVL"}) dự kiến về sau CRD ${etaDays} ngày — đang chờ nhà cung cấp xác nhận lại lịch giao.`;
+    },
+  },
+  {
+    code: "subcon_late",
+    label: "Gia công giao trễ",
+    color: "amber",
+    note: (r) => `Đơn gia công ${r.CUSTNAME ?? "KH"} chưa giao đúng hạn — nhà gia công phản hồi chậm hơn dự kiến ${ri(2, 7)} ngày do thiếu nhân công.`,
+  },
+  {
+    code: "customer_hold",
+    label: "Khách hàng holding",
+    color: "purple",
+    note: (r) => `${r.CUSTNAME ?? "KH"} yêu cầu tạm giữ đơn — đang chờ xác nhận từ phía mua hàng về thay đổi số lượng hoặc chất liệu.`,
+  },
+  {
+    code: "customer_spending",
+    label: "Khách hàng spending",
+    color: "blue",
+    note: (r) => `${r.CUSTNAME ?? "KH"} chưa xác nhận chi tiêu ngân sách quý — đơn bị hold cho đến khi phê duyệt PO.`,
+  },
+  {
+    code: "capacity",
+    label: "Thiếu năng lực chuyền",
+    color: "red",
+    note: (r, crd, goEnd) => {
+      const days = Math.round((goEnd - crd) / 86400000);
+      return `Chuyền may không đủ năng lực trong ${days} ngày CRD — cần xem xét phân bổ lại hoặc tăng ca.`;
+    },
+  },
+  {
+    code: "model_change",
+    label: "Thay đổi model / size",
+    color: "slate",
+    note: (r) => `${r.CUSTNAME ?? "KH"} điều chỉnh tỷ lệ size sau khi đặt hàng — cần tái lên kế hoạch cắt và may.`,
+  },
+];
+
 export function makeOutputOrders(runId) {
   const DIE_CODES = ["DAOMH1001","DAOMH1002","DAOMH1003","DAOMH2001","DAOMH2002","DAOMH3001","DAOMH3002","DAOMH4001"];
   const STATES = ["IN_PROGRESS","IN_PROGRESS","FUTURE_PLANNED","FUTURE_PLANNED","FUTURE_PLANNED",null,null,null];
@@ -471,31 +516,38 @@ export function makeOutputOrders(runId) {
     const isLate  = goEnd > crd;
     const state   = STATES[i % STATES.length];
     const qty     = r.QTY;
+    const daysLate = isLate ? Math.round((goEnd - crd) / 86400000) : 0;
+    const delayDef = isLate ? DELAY_REASONS[i % DELAY_REASONS.length] : null;
     return {
-      order_id:    r.RY,
-      scbh:        r.RY,
-      article:     r.Article,
-      model_name:  r.XieMing,
-      customer:    r.CUSTNAME,
-      factory:     fprefix + "-F2",
-      line:        lineMay,
-      line_may:    lineMay,
-      line_go:     lineGo,
+      order_id:     r.RY,
+      scbh:         r.RY,
+      article:      r.Article,
+      model_name:   r.XieMing,
+      customer:     r.CUSTNAME,
+      factory:      fprefix + "-F2",
+      line:         lineMay,
+      line_may:     lineMay,
+      line_go:      lineGo,
       dep_name_may: lineMay,
       dep_name_go:  lineGo,
       qty,
-      qty_total:   qty,
-      crd:         isoDate(crd),
-      sew_start:   isoDate(addDays(goStart, -ri(3, 7))),
-      sew_end:     isoDate(addDays(goStart, -1)),
-      go_start:    isoDate(goStart),
-      go_end:      isoDate(goEnd),
-      lpd:         r.LPD,
-      is_late:     isLate,
-      status:      isLate ? "late" : "on_time",
+      qty_total:    qty,
+      crd:          isoDate(crd),
+      sew_start:    isoDate(addDays(goStart, -ri(3, 7))),
+      sew_end:      isoDate(addDays(goStart, -1)),
+      go_start:     isoDate(goStart),
+      go_end:       isoDate(goEnd),
+      lpd:          r.LPD,
+      is_late:      isLate,
+      days_late:    daysLate,
+      delay_reason: delayDef?.code   ?? null,
+      delay_label:  delayDef?.label  ?? null,
+      delay_color:  delayDef?.color  ?? null,
+      delay_note:   delayDef ? delayDef.note(r, crd, goEnd) : null,
+      status:       isLate ? "late" : "on_time",
       state,
-      cutting_die: DIE_CODES[i % DIE_CODES.length],
-      sizes:       {},
+      cutting_die:  DIE_CODES[i % DIE_CODES.length],
+      sizes:        {},
     };
   });
   return { orders, items: orders, total: orders.length };

@@ -3,9 +3,9 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { clsx } from "clsx";
 import {
-  Undo2, Eye, Save, CheckCircle2, ChevronLeft, ChevronRight,
+  Undo2, Save, CheckCircle2, AlertCircle, MessageSquare,
   AlertTriangle, Lock, ArrowLeft, ListOrdered, CalendarDays,
-  History, X, Snowflake, Calendar, Info, Table2,
+  History, Snowflake, Calendar, Info, Table2, Bell,
 } from "lucide-react";
 
 import { useAuthStore } from "../../store/authStore";
@@ -245,82 +245,131 @@ function OrdersTable({ orders, chunks, onSelectOrder }) {
   );
 }
 
-// ── History log ───────────────────────────────────────────────────────────────
-function HistoryLog({ edits }) {
-  const LABELS = { move: "Di chuyển", add: "Thêm mới", delete: "Xóa", qty_change: "Sửa SL" };
-  if (!edits?.length)
-    return <div className="flex items-center justify-center h-40 text-sm text-slate-400">Chưa có chỉnh sửa nào.</div>;
+// ── Delay reason color config ─────────────────────────────────────────────────
+const DELAY_COLOR_CFG = {
+  orange: { badge: "bg-orange-100 text-orange-700 border-orange-200", bar: "border-l-orange-400" },
+  amber:  { badge: "bg-amber-100 text-amber-700 border-amber-200",   bar: "border-l-amber-400"  },
+  purple: { badge: "bg-purple-100 text-purple-700 border-purple-200", bar: "border-l-purple-400" },
+  blue:   { badge: "bg-blue-100 text-blue-700 border-blue-200",      bar: "border-l-blue-400"   },
+  red:    { badge: "bg-red-100 text-red-700 border-red-200",         bar: "border-l-red-400"    },
+  slate:  { badge: "bg-slate-100 text-slate-600 border-slate-200",   bar: "border-l-slate-300"  },
+};
+
+// ── Late order alert card ─────────────────────────────────────────────────────
+function LateOrderCard({ order, note, onNoteChange }) {
+  const cfg = DELAY_COLOR_CFG[order.delay_color] || DELAY_COLOR_CFG.slate;
   return (
-    <div className="divide-y divide-slate-100">
-      {[...edits].reverse().map((e, i) => (
-        <div key={i} className="px-4 py-3">
-          <div className="flex items-center gap-2 mb-0.5">
-            <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 rounded-full px-2 py-0.5">
-              {LABELS[e.action] || e.action}
-            </span>
-            <span className="font-mono text-xs font-semibold text-slate-700">{e.order_id || e.chunk_id?.split("|")[0]}</span>
-            <span className="ml-auto text-[10px] text-slate-400">
-              {e.changed_at ? new Date(e.changed_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : ""}
-            </span>
+    <div className={clsx(
+      "rounded-xl border border-slate-200 border-l-4 bg-white p-4 flex flex-col gap-2.5",
+      cfg.bar,
+    )}>
+      {/* Header */}
+      <div className="flex items-start gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-mono text-sm font-bold text-slate-800">{order.order_id}</span>
+            {order.article && <><span className="text-slate-300">·</span><span className="text-xs text-slate-500 truncate">{order.article}</span></>}
+            {order.customer && <span className="text-xs text-slate-400 italic truncate">{order.customer}</span>}
           </div>
-          <div className="text-[10px] text-slate-500">
-            {e.old_line !== e.new_line && e.old_line && e.new_line && `${e.old_line} → ${e.new_line} · `}
-            {e.old_date !== e.new_date && e.old_date && e.new_date && `${fmtDate(e.old_date)} → ${fmtDate(e.new_date)} · `}
-            {e.changed_by || ""}
+          <div className="flex items-center gap-3 mt-1 text-[11px]">
+            <span className="text-slate-500">
+              CRD: <strong className="text-red-600">{fmtDate(order.crd)}</strong>
+            </span>
+            {order.go_end && (
+              <span className="text-slate-500">
+                Gò xong: <strong className="text-slate-700">{fmtDate(order.go_end)}</strong>
+              </span>
+            )}
+            {order.days_late > 0 && (
+              <span className="inline-flex items-center gap-1 font-bold text-red-600">
+                <AlertCircle size={10} /> +{order.days_late} ngày
+              </span>
+            )}
           </div>
         </div>
-      ))}
+        {order.delay_label && (
+          <span className={clsx("shrink-0 rounded-full border text-[10px] font-semibold px-2.5 py-0.5 whitespace-nowrap", cfg.badge)}>
+            {order.delay_label}
+          </span>
+        )}
+      </div>
+
+      {/* System delay note */}
+      {order.delay_note && (
+        <p className="text-xs text-slate-600 bg-slate-50 rounded-lg px-3 py-2 leading-relaxed border border-slate-100">
+          {order.delay_note}
+        </p>
+      )}
+
+      {/* Planner note input */}
+      <div className="flex items-start gap-2">
+        <MessageSquare size={12} className="text-slate-400 shrink-0 mt-2" />
+        <textarea
+          rows={2}
+          value={note}
+          onChange={e => onNoteChange(order.order_id, e.target.value)}
+          placeholder="Thêm ghi chú xử lý của planner..."
+          className="flex-1 text-xs rounded-lg border border-slate-200 bg-white px-2.5 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 placeholder:text-slate-300 transition"
+        />
+      </div>
     </div>
   );
 }
 
-// ── Diff drawer ───────────────────────────────────────────────────────────────
-function DiffDrawer({ edits, onClose }) {
-  const LABELS = { move: "Di chuyển", add: "Thêm mới", delete: "Xóa", qty_change: "Sửa SL" };
+// ── Edit history table ────────────────────────────────────────────────────────
+function EditHistorySection({ edits }) {
+  const LABELS    = { move: "Di chuyển", add: "Thêm mới", delete: "Xóa", qty_change: "Sửa SL" };
+  const ACTION_CLS = {
+    move:       "bg-blue-50 text-blue-700",
+    add:        "bg-emerald-50 text-emerald-700",
+    delete:     "bg-red-50 text-red-700",
+    qty_change: "bg-amber-50 text-amber-700",
+  };
   return (
-    <div className="fixed inset-x-0 bottom-0 z-50 bg-white border-t-2 border-slate-200 shadow-2xl rounded-t-2xl" style={{ height: "45vh" }}>
-      <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
-        <div className="flex items-center gap-2">
-          <Eye size={15} className="text-slate-500" />
-          <span className="font-semibold text-sm text-slate-800">Xem thay đổi trong phiên</span>
-          {edits.length > 0 && (
-            <span className="rounded-full bg-blue-100 text-blue-700 text-[10px] font-semibold px-2 py-0.5">{edits.length}</span>
-          )}
-        </div>
-        <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-slate-100 text-slate-500 transition"><X size={15} /></button>
+    <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 bg-slate-50 border-b border-slate-200">
+        <History size={13} className="text-slate-500" />
+        <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">Lịch sử chỉnh sửa phiên này</span>
+        {edits.length > 0 && (
+          <span className="ml-auto rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5">
+            {edits.length} thay đổi
+          </span>
+        )}
       </div>
-      <div className="overflow-auto" style={{ height: "calc(45vh - 53px)" }}>
-        {!edits?.length ? (
-          <div className="flex items-center justify-center h-full text-sm text-slate-400">Chưa có thay đổi nào.</div>
-        ) : (
+      {!edits?.length ? (
+        <div className="flex items-center justify-center py-12 text-sm text-slate-400">
+          Chưa có chỉnh sửa nào trong phiên này.
+        </div>
+      ) : (
+        <div className="overflow-auto">
           <table className="w-full text-xs">
-            <thead className="bg-slate-50 sticky top-0">
+            <thead className="bg-slate-50 sticky top-0 border-b border-slate-200">
               <tr>
                 {["Giờ", "Mã đơn", "Hành động", "Chuyền cũ → mới", "Ngày cũ → mới", "Người TH"].map(h => (
-                  <th key={h} className="border-b border-slate-200 px-4 py-2 text-left font-semibold text-slate-500 whitespace-nowrap">{h}</th>
+                  <th key={h} className="px-4 py-2.5 text-left font-semibold text-slate-500 whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {edits.map((e, i) => (
-                <tr key={i} className="hover:bg-slate-50">
-                  <td className="px-4 py-2.5 text-slate-400 whitespace-nowrap">
+                <tr key={i} className="hover:bg-slate-50 transition-colors">
+                  <td className="px-4 py-2.5 text-slate-400 whitespace-nowrap font-mono text-[11px]">
                     {e.changed_at ? new Date(e.changed_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "—"}
                   </td>
-                  <td className="px-4 py-2.5 font-mono font-semibold text-slate-700">{e.order_id || e.chunk_id?.split("|")[0] || "—"}</td>
+                  <td className="px-4 py-2.5 font-mono font-bold text-slate-700">{e.order_id || e.chunk_id?.split("|")[0] || "—"}</td>
                   <td className="px-4 py-2.5">
-                    <span className="rounded-full bg-blue-50 text-blue-700 px-2 py-0.5 text-[10px] font-semibold">
+                    <span className={clsx("rounded-full px-2 py-0.5 text-[10px] font-semibold", ACTION_CLS[e.action] || "bg-slate-100 text-slate-600")}>
                       {LABELS[e.action] || e.action}
                     </span>
                   </td>
                   <td className="px-4 py-2.5 text-slate-600">
                     {e.old_line && e.new_line && e.old_line !== e.new_line
-                      ? <span>{e.old_line} <span className="text-slate-400">→</span> <strong>{e.new_line}</strong></span>
+                      ? <span>{e.old_line} <span className="text-slate-400 mx-1">→</span><strong className="text-slate-800">{e.new_line}</strong></span>
                       : <span className="text-slate-300">—</span>}
                   </td>
                   <td className="px-4 py-2.5 font-mono text-slate-600">
                     {e.old_date && e.new_date && e.old_date !== e.new_date
-                      ? <span>{fmtDate(e.old_date)} <span className="text-slate-400">→</span> <strong>{fmtDate(e.new_date)}</strong></span>
+                      ? <span>{fmtDate(e.old_date)} <span className="text-slate-400 mx-1">→</span><strong className="text-slate-800">{fmtDate(e.new_date)}</strong></span>
                       : <span className="text-slate-300">—</span>}
                   </td>
                   <td className="px-4 py-2.5 text-slate-500">{e.changed_by || "—"}</td>
@@ -328,8 +377,8 @@ function DiffDrawer({ edits, onClose }) {
               ))}
             </tbody>
           </table>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -383,8 +432,8 @@ export default function ScheduleAdjustPage() {
   const [saveStatus,  setSaveStatus]  = useState("idle");
   const saveTimer = useRef(null);
 
-  const [mainTab,  setMainTab]  = useState("lich");
-  const [showDiff, setShowDiff] = useState(false);
+  const [mainTab,      setMainTab]      = useState("lich");
+  const [plannerNotes, setPlannerNotes] = useState({});
 
   const hasChanges = localChunks !== null;
 
@@ -509,13 +558,6 @@ export default function ScheduleAdjustPage() {
             {undoStack.length > 0 && <span className="rounded-full bg-slate-100 text-[10px] px-1.5">{undoStack.length}</span>}
           </button>
 
-          <button onClick={() => setShowDiff(v => !v)}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition">
-            <Eye size={13} />
-            Xem thay đổi
-            {chunkEdits.length > 0 && <span className="rounded-full bg-blue-100 text-blue-700 text-[10px] px-1.5">{chunkEdits.length}</span>}
-          </button>
-
           <button onClick={() => toast("Đã lưu nháp lịch điều chỉnh", "success")}
             className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition">
             <Save size={13} />
@@ -610,29 +652,55 @@ export default function ScheduleAdjustPage() {
                 </div>
               )}
 
-              {/* Lịch sử tab */}
+              {/* Lịch sử tab — late alerts + edit history */}
               {mainTab === "history" && (
-                <div className="flex-1 min-h-0 overflow-auto">
-                  {chunkEdits.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full gap-2 text-slate-400 py-20">
-                      <History size={36} strokeWidth={1.2} />
-                      <p className="text-sm font-medium text-slate-500">Chưa có thay đổi nào trong phiên này.</p>
-                      <p className="text-xs text-slate-300">Các chỉnh sửa lịch sẽ hiển thị ở đây.</p>
-                    </div>
-                  ) : (
-                    <div className="max-w-3xl mx-auto py-5 px-5">
-                      <HistoryLog edits={chunkEdits} />
-                    </div>
-                  )}
+                <div className="flex-1 min-h-0 overflow-auto bg-slate-50">
+                  <div className="p-5 space-y-5 max-w-5xl">
+
+                    {/* ── Late order alerts ───────────────────────────── */}
+                    {(() => {
+                      const lateOrders = orders.filter(o => o.is_late && o.delay_reason);
+                      if (!lateOrders.length) return (
+                        <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                          <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />
+                          <p className="text-xs font-semibold text-emerald-700">Không có đơn trễ hạn trong lịch này.</p>
+                        </div>
+                      );
+                      return (
+                        <div>
+                          <div className="flex items-center gap-2 mb-3">
+                            <Bell size={13} className="text-red-500 shrink-0" />
+                            <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                              Đơn trễ hạn — cần xử lý
+                            </span>
+                            <span className="rounded-full bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5">
+                              {lateOrders.length} đơn
+                            </span>
+                            <div className="flex-1 h-px bg-red-100" />
+                          </div>
+                          <div className="space-y-3">
+                            {lateOrders.map(o => (
+                              <LateOrderCard
+                                key={o.order_id}
+                                order={o}
+                                note={plannerNotes[o.order_id] ?? ""}
+                                onNoteChange={(id, v) => setPlannerNotes(n => ({ ...n, [id]: v }))}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* ── Edit history ─────────────────────────────────── */}
+                    <EditHistorySection edits={chunkEdits} />
+                  </div>
                 </div>
               )}
             </>
           )}
         </div>
       </div>
-
-      {/* DIFF DRAWER */}
-      {showDiff && <DiffDrawer edits={chunkEdits} onClose={() => setShowDiff(false)} />}
     </div>
   );
 }
