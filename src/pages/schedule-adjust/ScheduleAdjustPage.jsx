@@ -5,7 +5,7 @@ import { clsx } from "clsx";
 import {
   Undo2, Save, CheckCircle2, AlertCircle, MessageSquare,
   AlertTriangle, Lock, ArrowLeft, ListOrdered, CalendarDays,
-  History, Snowflake, Calendar, Info, Table2, Bell,
+  History, Snowflake, Calendar, Info, Table2, Bell, X,
 } from "lucide-react";
 
 import { useAuthStore } from "../../store/authStore";
@@ -432,8 +432,9 @@ export default function ScheduleAdjustPage() {
   const [saveStatus,  setSaveStatus]  = useState("idle");
   const saveTimer = useRef(null);
 
-  const [mainTab,      setMainTab]      = useState("lich");
-  const [plannerNotes, setPlannerNotes] = useState({});
+  const [mainTab,       setMainTab]       = useState("lich");
+  const [plannerNotes,  setPlannerNotes]  = useState({});
+  const [lateAlertOpen, setLateAlertOpen] = useState(false);
 
   const hasChanges = localChunks !== null;
 
@@ -468,6 +469,8 @@ export default function ScheduleAdjustPage() {
     return { total, late, onTimePct, unscheduled };
   }, [chunks, orders]);
 
+  const lateOrders = useMemo(() => orders.filter(o => o.is_late && o.delay_reason), [orders]);
+
   // ── Handlers ─────────────────────────────────────────────────────────────
   const handleChunkChanged = useCallback(async (change) => {
     setUndoStack(s => [...s.slice(-19), localChunks ?? apiChunks]);
@@ -492,7 +495,7 @@ export default function ScheduleAdjustPage() {
   const runLabel    = runData?.run_label ?? `Run #${ACTIVE_RUN_ID}`;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-white">
+    <div className="relative flex flex-col h-full overflow-hidden bg-white">
 
       {/* ── TOPBAR ─────────────────────────────────────────────────────────── */}
       <div className="shrink-0 h-12 flex items-center gap-3 border-b border-slate-200 bg-white px-4">
@@ -593,9 +596,20 @@ export default function ScheduleAdjustPage() {
           ))}
         </div>
 
-        <div className="flex items-center gap-1.5 text-xs text-slate-400">
-          <Snowflake size={11} className="text-blue-400 shrink-0" />
-          <span>Đóng băng đến <strong className="text-slate-600">{fmtDate(FROZEN_UNTIL)}</strong></span>
+        <div className="flex items-center gap-2">
+          {lateOrders.length > 0 && (
+            <button
+              onClick={() => setLateAlertOpen(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-100 transition"
+            >
+              <Bell size={12} className="shrink-0" />
+              <span>{lateOrders.length} đơn trễ</span>
+            </button>
+          )}
+          <div className="flex items-center gap-1.5 text-xs text-slate-400">
+            <Snowflake size={11} className="text-blue-400 shrink-0" />
+            <span>Đóng băng đến <strong className="text-slate-600">{fmtDate(FROZEN_UNTIL)}</strong></span>
+          </div>
         </div>
       </div>
 
@@ -652,47 +666,10 @@ export default function ScheduleAdjustPage() {
                 </div>
               )}
 
-              {/* Lịch sử tab — late alerts + edit history */}
+              {/* Lịch sử tab — edit history only */}
               {mainTab === "history" && (
                 <div className="flex-1 min-h-0 overflow-auto bg-slate-50">
-                  <div className="p-5 space-y-5 max-w-5xl">
-
-                    {/* ── Late order alerts ───────────────────────────── */}
-                    {(() => {
-                      const lateOrders = orders.filter(o => o.is_late && o.delay_reason);
-                      if (!lateOrders.length) return (
-                        <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-                          <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />
-                          <p className="text-xs font-semibold text-emerald-700">Không có đơn trễ hạn trong lịch này.</p>
-                        </div>
-                      );
-                      return (
-                        <div>
-                          <div className="flex items-center gap-2 mb-3">
-                            <Bell size={13} className="text-red-500 shrink-0" />
-                            <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
-                              Đơn trễ hạn — cần xử lý
-                            </span>
-                            <span className="rounded-full bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5">
-                              {lateOrders.length} đơn
-                            </span>
-                            <div className="flex-1 h-px bg-red-100" />
-                          </div>
-                          <div className="space-y-3">
-                            {lateOrders.map(o => (
-                              <LateOrderCard
-                                key={o.order_id}
-                                order={o}
-                                note={plannerNotes[o.order_id] ?? ""}
-                                onNoteChange={(id, v) => setPlannerNotes(n => ({ ...n, [id]: v }))}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })()}
-
-                    {/* ── Edit history ─────────────────────────────────── */}
+                  <div className="p-5 max-w-5xl">
                     <EditHistorySection edits={chunkEdits} />
                   </div>
                 </div>
@@ -701,6 +678,46 @@ export default function ScheduleAdjustPage() {
           )}
         </div>
       </div>
+
+      {/* ── Late-orders slide-in drawer (right → left) ───────────────────── */}
+      {lateAlertOpen && (
+        <>
+          <div
+            className="absolute inset-0 z-40 bg-black/20"
+            onClick={() => setLateAlertOpen(false)}
+          />
+          <div className="absolute inset-y-0 right-0 z-50 flex w-[400px] max-w-full flex-col bg-white shadow-2xl border-l border-slate-200">
+            <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3 shrink-0 bg-white">
+              <Bell size={14} className="text-red-500 shrink-0" />
+              <span className="flex-1 text-sm font-bold text-slate-800">Đơn trễ hạn — cần xử lý</span>
+              <span className="rounded-full bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5">
+                {lateOrders.length} đơn
+              </span>
+              <button
+                onClick={() => setLateAlertOpen(false)}
+                className="ml-1 rounded-md p-1 hover:bg-slate-100 text-slate-400 transition"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
+              {lateOrders.length === 0 ? (
+                <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 mt-2">
+                  <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />
+                  <p className="text-xs font-semibold text-emerald-700">Không có đơn trễ hạn trong lịch này.</p>
+                </div>
+              ) : lateOrders.map(o => (
+                <LateOrderCard
+                  key={o.order_id}
+                  order={o}
+                  note={plannerNotes[o.order_id] ?? ""}
+                  onNoteChange={(id, v) => setPlannerNotes(n => ({ ...n, [id]: v }))}
+                />
+              ))}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
